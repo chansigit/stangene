@@ -8,6 +8,76 @@ Designed to be invoked as a Claude Code / Codex skill or used as a standalone Py
 
 ---
 
+## Workflow
+
+```
+                        Input Dataset
+                     (.h5ad / .tsv / .csv)
+                             |
+                             v
+                   +-------------------+
+                   |  load_features()  |   Extract feature metadata
+                   +-------------------+   (not the expression matrix)
+                             |
+                             v
+                  +---------------------+
+                  | classify_features() |   Triage: gene vs non-gene
+                  +---------------------+
+                             |
+              +--------------+--------------+
+              |                             |
+              v                             v
+        Gene features               Non-gene features
+              |                    (antibody, CRISPR, spike-in,
+              |                     peaks, transcripts)
+              |                             |
+              v                             v
+     +------------------+           Labeled as non_gene_feature
+     | load_reference() |           and passed through
+     +------------------+
+              |
+              v
+     +------------------+
+     |   harmonize()    |   5-tier matching cascade
+     +------------------+
+              |
+     +--------+--------+---------+---------+--------+
+     |        |        |         |         |        |
+     v        v        v         v         v        v
+  Tier 1   Tier 2   Tier 3    Tier 4    Tier 5   Excel
+  Exact    ID no    Exact     Alias/    Unmapped  date
+   ID      version  symbol    prev sym           detect
+  (high)   (high)   (high)   (medium)
+              |
+              v
+    +--------------------+
+    |  HarmonizationResult  |
+    +--------------------+
+         |          |
+         v          v
+  +-------------+  +----------------+
+  | write_results| | write_reports()|
+  +-------------+  +----------------+
+         |                |
+         v                v
+  harmonization     summary.json
+  _table.tsv        conflicts.tsv
+  *_harmonized      unmapped.tsv
+    .h5ad
+                         |
+                         v
+              +---------------------+
+              | merge_features()    |   Optional, explicit opt-in
+              | (strict / symbol)   |
+              +---------------------+
+                         |
+                         v
+                   MergeResult
+              (merged_table + provenance)
+```
+
+---
+
 ## Install
 
 ```bash
