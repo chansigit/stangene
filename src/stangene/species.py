@@ -69,7 +69,7 @@ _SPECIES_CONFIGS: dict[str, SpeciesConfig] = {
         naming_convention="uppercase",
         reference_sources={
             "hgnc": {
-                "url": "https://ftp.ebi.ac.uk/pub/databases/genenames/hgnc/tsv/hgnc_complete_set.txt",
+                "url": "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt",
                 "description": "HGNC complete gene set with symbols, aliases, and Ensembl IDs",
             },
         },
