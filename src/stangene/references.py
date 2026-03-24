@@ -171,5 +171,119 @@ def _build_human_reference(config, ref_dir: str) -> None:
 
 
 def _build_mouse_reference(config, ref_dir: str) -> None:
-    """Placeholder — implemented in Task 6."""
-    raise NotImplementedError("Mouse reference builder will be implemented in Task 6")
+    """Build mouse reference from MGI marker files + Ensembl mapping."""
+    markers_url = config.reference_sources["mgi_markers"]["url"]
+    ensembl_url = config.reference_sources["mgi_ensembl"]["url"]
+
+    markers_raw = _download_file(markers_url)
+    ensembl_raw = _download_file(ensembl_url)
+
+    markers_checksum = hashlib.sha256(markers_raw).hexdigest()
+    ensembl_checksum = hashlib.sha256(ensembl_raw).hexdigest()
+
+    markers = pd.read_csv(io.BytesIO(markers_raw), sep="\t", low_memory=False)
+    markers.columns = markers.columns.str.strip()
+
+    ensembl_map = pd.read_csv(io.BytesIO(ensembl_raw), sep="\t", low_memory=False)
+    ensembl_map.columns = ensembl_map.columns.str.strip()
+
+    # Build MGI ID -> Ensembl ID lookup
+    mgi_to_ensembl = {}
+    eid_col = [c for c in ensembl_map.columns if "ensembl" in c.lower() and "id" in c.lower()]
+    mid_col = [c for c in ensembl_map.columns if "mgi" in c.lower() and "accession" in c.lower()]
+    if eid_col and mid_col:
+        for _, row in ensembl_map.iterrows():
+            mgi_id = row[mid_col[0]]
+            ens_id = row[eid_col[0]]
+            if pd.notna(mgi_id) and pd.notna(ens_id) and str(ens_id).startswith("ENSMUSG"):
+                mgi_to_ensembl[str(mgi_id)] = str(ens_id)
+
+    # Build gene table
+    sym_col = [c for c in markers.columns if "marker symbol" in c.lower()][0]
+    status_col = [c for c in markers.columns if "status" in c.lower()][0]
+    type_col = [c for c in markers.columns if "feature type" in c.lower()][0]
+    mgi_col = [c for c in markers.columns if "mgi accession" in c.lower()][0]
+    syn_col = [c for c in markers.columns if "synonym" in c.lower()][0]
+
+    rows = []
+    for _, m in markers.iterrows():
+        mgi_id = str(m[mgi_col]) if pd.notna(m[mgi_col]) else ""
+        symbol = str(m[sym_col]) if pd.notna(m[sym_col]) else ""
+        ensembl_id = mgi_to_ensembl.get(mgi_id)
+        synonyms = str(m[syn_col]) if pd.notna(m[syn_col]) else ""
+
+        status = "approved" if str(m[status_col]).strip() == "O" else "withdrawn"
+        gene_type = str(m[type_col]) if pd.notna(m[type_col]) else ""
+
+        rows.append({
+            "ensembl_id": ensembl_id,
+            "symbol": symbol,
+            "alias_symbols": synonyms,
+            "prev_symbols": "",
+            "gene_type": gene_type,
+            "status": status,
+            "source": "MGI",
+            "source_id": mgi_id,
+        })
+
+    gene_table = pd.DataFrame(rows)
+
+    # Supplementary BioMart fill (non-fatal if it fails)
+    biomart_url = config.reference_sources.get("ensembl_biomart", {}).get("url", "")
+    if biomart_url:
+        try:
+            biomart_xml = (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<!DOCTYPE Query>'
+                '<Query virtualSchemaName="default" formatter="TSV" header="1">'
+                '<Dataset name="mmusculus_gene_ensembl" interface="default">'
+                '<Attribute name="ensembl_gene_id"/>'
+                '<Attribute name="external_gene_name"/>'
+                '<Attribute name="mgi_id"/>'
+                '</Dataset></Query>'
+            )
+            import urllib.parse
+            full_url = biomart_url + urllib.parse.quote(biomart_xml)
+            biomart_raw = _download_file(full_url)
+            biomart_df = pd.read_csv(io.BytesIO(biomart_raw), sep="\t", low_memory=False)
+            biomart_df.columns = ["ensembl_id_bm", "symbol_bm", "mgi_id_bm"]
+
+            null_mask = gene_table["ensembl_id"].isna()
+            if null_mask.any():
+                bm_by_mgi = biomart_df.dropna(subset=["mgi_id_bm"]).drop_duplicates(subset=["mgi_id_bm"])
+                bm_mgi_map = dict(zip(bm_by_mgi["mgi_id_bm"], bm_by_mgi["ensembl_id_bm"]))
+                for idx in gene_table[null_mask].index:
+                    sid = gene_table.at[idx, "source_id"]
+                    if sid in bm_mgi_map:
+                        gene_table.at[idx, "ensembl_id"] = bm_mgi_map[sid]
+
+                still_null = gene_table["ensembl_id"].isna()
+                if still_null.any():
+                    bm_by_sym = biomart_df.dropna(subset=["symbol_bm"]).drop_duplicates(subset=["symbol_bm"])
+                    bm_sym_map = dict(zip(bm_by_sym["symbol_bm"], bm_by_sym["ensembl_id_bm"]))
+                    for idx in gene_table[still_null].index:
+                        sym = gene_table.at[idx, "symbol"]
+                        if sym in bm_sym_map:
+                            gene_table.at[idx, "ensembl_id"] = bm_sym_map[sym]
+
+                filled = null_mask.sum() - gene_table["ensembl_id"].isna().sum()
+                logger.info("BioMart supplementary fill: %d/%d gaps filled", filled, null_mask.sum())
+        except Exception as e:
+            logger.warning("BioMart supplementary download failed (non-fatal): %s", e)
+
+    symbol_lookup = _build_symbol_lookup(gene_table, source="MGI")
+
+    metadata = {
+        "species": "mouse",
+        "download_timestamp": datetime.now(timezone.utc).isoformat(),
+        "sources": {
+            "mgi_markers": {"url": markers_url, "sha256": markers_checksum, "rows": len(markers)},
+            "mgi_ensembl": {"url": ensembl_url, "sha256": ensembl_checksum, "rows": len(ensembl_map)},
+            "ensembl_biomart": {"url": biomart_url, "note": "supplementary Ensembl ID gap fill"},
+        },
+        "gene_count": len(gene_table),
+        "lookup_count": len(symbol_lookup),
+    }
+
+    _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
+    logger.info("Built mouse reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))

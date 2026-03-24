@@ -113,3 +113,86 @@ def test_build_force_redownloads(ref_dir, mock_hgnc_data):
         build_reference("human", reference_dir=ref_dir)
         build_reference("human", reference_dir=ref_dir, force=True)
         assert mock_dl.call_count >= 2
+
+
+@pytest.fixture
+def mock_mgi_markers_data():
+    """Minimal MGI MRK_List2.rpt format."""
+    return (
+        "MGI Accession ID\tChr\tcM Position\tgenome coordinate start\tgenome coordinate end\tstrand\tMarker Symbol\tStatus\tMarker Name\tMarker Type\tFeature Type\tMarker Synonyms (pipe-separated)\n"
+        "MGI:87853\t11\t\t69580359\t69591872\t+\tTrp53\tO\ttransformation related protein 53\tGene\tprotein coding gene\tp53|Tp53\n"
+        "MGI:104738\t11\t\t101453964\t101517817\t+\tBrca1\tO\tbreast cancer 1, early onset\tGene\tprotein coding gene\tBrca1\n"
+        "MGI:12345\t1\t\t1000\t2000\t+\tFakeGene\tO\tfake gene\tGene\tprotein coding gene\t\n"
+    )
+
+
+@pytest.fixture
+def mock_mgi_ensembl_data():
+    """Minimal MGI MRK_ENSEMBL.rpt format."""
+    return (
+        "MGI Marker Accession ID\tMarker Symbol\tMarker Name\tcM Position\tChromosome\tEnsembl Gene ID\n"
+        "MGI:87853\tTrp53\ttransformation related protein 53\t\t11\tENSMUSG00000059552\n"
+        "MGI:104738\tBrca1\tbreast cancer 1, early onset\t\t11\tENSMUSG00000017146\n"
+    )
+
+
+def test_build_mouse_creates_files(ref_dir, mock_mgi_markers_data, mock_mgi_ensembl_data):
+    def mock_download(url):
+        if "MRK_List2" in url:
+            return mock_mgi_markers_data.encode("utf-8")
+        elif "MRK_ENSEMBL" in url:
+            return mock_mgi_ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("mouse", reference_dir=ref_dir)
+
+    mouse_dir = os.path.join(ref_dir, "mouse")
+    assert os.path.exists(os.path.join(mouse_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(mouse_dir, "symbol_lookup.parquet"))
+
+
+def test_build_mouse_gene_table(ref_dir, mock_mgi_markers_data, mock_mgi_ensembl_data):
+    def mock_download(url):
+        if "MRK_List2" in url:
+            return mock_mgi_markers_data.encode("utf-8")
+        elif "MRK_ENSEMBL" in url:
+            return mock_mgi_ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("mouse", reference_dir=ref_dir)
+
+    ref = load_reference("mouse", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    trp53 = gt[gt["symbol"] == "Trp53"]
+    assert len(trp53) == 1
+    assert trp53.iloc[0]["ensembl_id"] == "ENSMUSG00000059552"
+    assert trp53.iloc[0]["source_id"] == "MGI:87853"
+
+    fake = gt[gt["symbol"] == "FakeGene"]
+    assert len(fake) == 1
+    assert pd.isna(fake.iloc[0]["ensembl_id"])
+    assert fake.iloc[0]["source_id"] == "MGI:12345"
+
+
+def test_build_mouse_symbol_lookup(ref_dir, mock_mgi_markers_data, mock_mgi_ensembl_data):
+    def mock_download(url):
+        if "MRK_List2" in url:
+            return mock_mgi_markers_data.encode("utf-8")
+        elif "MRK_ENSEMBL" in url:
+            return mock_mgi_ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("mouse", reference_dir=ref_dir)
+
+    ref = load_reference("mouse", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    trp53_approved = sl[(sl["lookup_string"] == "Trp53") & (sl["lookup_type"] == "approved_symbol")]
+    assert len(trp53_approved) == 1
+
+    p53_alias = sl[(sl["lookup_string"] == "p53") & (sl["lookup_type"] == "alias_symbol")]
+    assert len(p53_alias) == 1
