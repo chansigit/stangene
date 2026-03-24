@@ -67,7 +67,8 @@ stangene/
 │       ├── merge.py             # conservative merge logic
 │       ├── report.py            # summary(), conflict_report(), write_reports()
 │       ├── species.py           # species-specific config
-│       └── _logging.py          # structured logging setup
+│       ├── _logging.py          # structured logging setup
+│       └── __main__.py          # CLI entry point
 ├── references/                  # gitignored; built by build_reference()
 │   ├── human/
 │   │   ├── gene_table.parquet
@@ -364,7 +365,7 @@ Flat table listing:
 - Likely outdated names (features resolved only via `previous_symbol`)
 
 ```python
-def write_reports(result: HarmonizationResult, output_dir: str) -> None
+def write_reports(result: HarmonizationResult, output_dir: str, merge_result: MergeResult = None) -> None
 ```
 
 Writes:
@@ -399,7 +400,7 @@ Wraps the full pipeline:
 5. `write_reports(result, output_dir)` — if `output_dir` provided
 6. Returns `HarmonizationResult`
 
-`run()` does NOT auto-build references. It raises a clear error directing the user to call `build_reference(species)` first. The Claude Code skill (Section 7) handles the build-if-missing logic as a separate explicit step.
+`run()` does NOT auto-build references. It raises `ReferenceNotFoundError` (defined in `references.py`) directing the user to call `build_reference(species)` first. The Claude Code skill (Section 7) handles the build-if-missing logic as a separate explicit step.
 
 ### CLI Entry Point
 
@@ -447,7 +448,7 @@ One row per original feature:
 | `original_feature_id` | Raw feature ID from input (if available) |
 | `original_feature_type` | Classified feature type |
 | `feature_id_no_version` | Ensembl ID with version suffix stripped |
-| `gene_id_harmonized` | Canonical Ensembl gene ID |
+| `gene_id_harmonized` | Canonical Ensembl gene ID (or source_id fallback, e.g. MGI:nnnnnnn) |
 | `gene_symbol_harmonized` | Official approved symbol |
 | `mapping_status` | Tier that resolved the mapping |
 | `mapping_confidence` | high / medium / low / null |
