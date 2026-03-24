@@ -131,3 +131,54 @@ def _load_tabular(path: str, column_map: dict = None) -> pd.DataFrame:
         ft["original_feature_name"] = raw.iloc[:, 0].values
 
     return ft.reset_index(drop=True)
+
+
+def write_results(
+    result,
+    output_dir: str,
+    input_path: str = None,
+    overwrite_h5ad: bool = False,
+) -> None:
+    """Write harmonization results to disk."""
+    os.makedirs(output_dir, exist_ok=True)
+
+    result.mapping_table.to_csv(
+        os.path.join(output_dir, "harmonization_table.tsv"), sep="\t", index=False,
+    )
+    logger.info("Wrote harmonization_table.tsv to %s", output_dir)
+
+    if input_path and os.path.splitext(input_path)[1].lower() in (".h5ad", ".h5"):
+        _write_enriched_h5ad(result, input_path, output_dir, overwrite_h5ad)
+
+
+def _write_enriched_h5ad(result, input_path: str, output_dir: str, overwrite: bool) -> None:
+    """Add harmonization columns to adata.var and save."""
+    adata = anndata.read_h5ad(input_path)
+
+    mt = result.mapping_table.set_index("original_feature_name")
+    harm_cols = [
+        "gene_id_harmonized", "gene_symbol_harmonized",
+        "mapping_status", "mapping_confidence", "mapping_source", "mapping_notes",
+        "original_feature_type", "feature_id_no_version",
+    ]
+
+    for col in harm_cols:
+        if col in mt.columns:
+            col_data = (
+                mt[col] if not mt.index.duplicated().any()
+                else mt[~mt.index.duplicated(keep="first")][col]
+            )
+            mapped = adata.var_names.map(col_data.to_dict())
+            # h5py cannot write non-string objects; fill NaN with empty string
+            if mapped.dtype == object:
+                mapped = mapped.fillna("").astype(str)
+            adata.var[col] = mapped
+
+    if overwrite:
+        adata.write_h5ad(input_path)
+        logger.info("Overwrote %s with harmonization columns", input_path)
+    else:
+        basename = os.path.splitext(os.path.basename(input_path))[0]
+        out_path = os.path.join(output_dir, f"{basename}_harmonized.h5ad")
+        adata.write_h5ad(out_path)
+        logger.info("Wrote enriched h5ad to %s", out_path)

@@ -107,3 +107,34 @@ def test_load_empty_ids_become_none(sample_h5ad):
     ft = load_features(sample_h5ad, species="human")
     cd3_row = ft[ft["original_feature_name"] == "CD3_ADT"].iloc[0]
     assert pd.isna(cd3_row["original_feature_id"]) or cd3_row["original_feature_id"] == ""
+
+
+from stangene.io import write_results
+from stangene.harmonize import HarmonizationResult
+
+
+@pytest.fixture
+def sample_result():
+    mt = pd.DataFrame([
+        {"original_feature_name": "TP53", "gene_id_harmonized": "ENSG00000141510",
+         "gene_symbol_harmonized": "TP53", "mapping_status": "exact_id",
+         "mapping_confidence": "high", "original_feature_type": "gene",
+         "species": "human", "dataset": "test"},
+    ])
+    return HarmonizationResult(mt, pd.DataFrame(), {"exact_id": 1})
+
+
+def test_write_results_creates_tsv(sample_result, tmp_path):
+    output_dir = str(tmp_path / "out")
+    write_results(sample_result, output_dir)
+    assert os.path.exists(os.path.join(output_dir, "harmonization_table.tsv"))
+
+
+def test_write_results_enriches_h5ad(sample_result, sample_h5ad, tmp_path):
+    output_dir = str(tmp_path / "out")
+    write_results(sample_result, output_dir, input_path=sample_h5ad)
+    enriched_path = os.path.join(output_dir, "test_harmonized.h5ad")
+    assert os.path.exists(enriched_path)
+    adata = anndata.read_h5ad(enriched_path)
+    assert "gene_id_harmonized" in adata.var.columns
+    assert "TP53" in adata.var_names
