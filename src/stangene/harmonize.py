@@ -1,5 +1,6 @@
 """Tiered harmonization cascade for gene identifier mapping."""
 
+from collections import defaultdict
 from dataclasses import dataclass
 
 import pandas as pd
@@ -19,6 +20,58 @@ class HarmonizationResult:
     stats: dict
 
 
+def _build_lookup_dicts(symbol_lookup: pd.DataFrame):
+    """Pre-build dictionary lookups for O(1) access per feature.
+
+    Returns:
+        approved_dict: {lookup_string: [list of matching rows as dicts]}
+        alias_prev_dict: {lookup_string: [list of matching rows as dicts]}
+    """
+    approved_dict = defaultdict(list)
+    alias_prev_dict = defaultdict(list)
+
+    for row in symbol_lookup.itertuples(index=False):
+        entry = {
+            "lookup_string": row.lookup_string,
+            "ensembl_id": row.ensembl_id if pd.notna(row.ensembl_id) else None,
+            "source_id": row.source_id,
+            "lookup_type": row.lookup_type,
+            "source": row.source,
+        }
+        if row.lookup_type == "approved_symbol":
+            approved_dict[row.lookup_string].append(entry)
+        else:
+            alias_prev_dict[row.lookup_string].append(entry)
+
+    return dict(approved_dict), dict(alias_prev_dict)
+
+
+def _build_gene_info_dicts(gene_table: pd.DataFrame):
+    """Pre-build gene info lookups by ensembl_id and source_id.
+
+    Returns:
+        eid_to_gene: {ensembl_id: {symbol, status, gene_type, source_id, ...}}
+        sid_to_gene: {source_id: {symbol, status, gene_type, ensembl_id, ...}}
+    """
+    eid_to_gene = {}
+    sid_to_gene = {}
+
+    for row in gene_table.itertuples(index=False):
+        gene_info = {
+            "ensembl_id": row.ensembl_id if pd.notna(row.ensembl_id) else None,
+            "symbol": row.symbol,
+            "status": row.status if pd.notna(row.status) else "",
+            "gene_type": row.gene_type if pd.notna(row.gene_type) else "",
+            "source_id": row.source_id,
+        }
+        if pd.notna(row.ensembl_id):
+            eid_to_gene[row.ensembl_id] = gene_info
+        if pd.notna(row.source_id):
+            sid_to_gene[row.source_id] = gene_info
+
+    return eid_to_gene, sid_to_gene
+
+
 def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
     result = ft.copy()
     gene_table = ref["gene_table"]
@@ -29,11 +82,13 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
         if col not in result.columns:
             result[col] = None
 
+    # Build O(1) lookup structures
     ensembl_id_set = set(gene_table["ensembl_id"].dropna())
-    ensembl_id_to_row = gene_table.dropna(subset=["ensembl_id"]).set_index("ensembl_id")
+    eid_to_gene, sid_to_gene = _build_gene_info_dicts(gene_table)
+    approved_dict, alias_prev_dict = _build_lookup_dicts(symbol_lookup)
 
-    approved_lookup = symbol_lookup[symbol_lookup["lookup_type"] == "approved_symbol"]
-    alias_prev_lookup = symbol_lookup[symbol_lookup["lookup_type"].isin(["alias_symbol", "prev_symbol"])]
+    logger.info("Built lookup dicts: %d ensembl IDs, %d approved symbols, %d alias/prev entries",
+                len(ensembl_id_set), len(approved_dict), len(alias_prev_dict))
 
     for idx in result.index:
         if result.at[idx, "mapping_status"] == "non_gene_feature":
@@ -57,48 +112,44 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
 
         # Tier 1: Exact stable ID match
         if feature_id and feature_id in ensembl_id_set:
-            gene_row = ensembl_id_to_row.loc[feature_id]
-            if isinstance(gene_row, pd.DataFrame):
-                gene_row = gene_row.iloc[0]
-            _apply_match(result, idx, gene_row, "exact_id", "high", "HGNC:exact_id", notes)
+            gene_info = eid_to_gene[feature_id]
+            _apply_gene_match(result, idx, gene_info, "exact_id", "high",
+                              f"{gene_info.get('source_id', 'HGNC')}:exact_id", notes)
             continue
 
         # Tier 2: Version-stripped ID match
         if feature_id_nv and feature_id_nv in ensembl_id_set:
-            gene_row = ensembl_id_to_row.loc[feature_id_nv]
-            if isinstance(gene_row, pd.DataFrame):
-                gene_row = gene_row.iloc[0]
+            gene_info = eid_to_gene[feature_id_nv]
             notes.append(f"Matched via version-stripped ID: {feature_id} -> {feature_id_nv}")
-            _apply_match(result, idx, gene_row, "id_no_version", "high", "HGNC:id_no_version", notes)
+            _apply_gene_match(result, idx, gene_info, "id_no_version", "high",
+                              f"{gene_info.get('source_id', 'HGNC')}:id_no_version", notes)
             continue
 
         # Tier 3: Exact approved symbol match
-        matches = approved_lookup[approved_lookup["lookup_string"] == feature_name]
+        matches = approved_dict.get(feature_name, [])
         if len(matches) == 1:
-            match = matches.iloc[0]
+            match = matches[0]
             eid = match["ensembl_id"]
             confidence = "high"
             # Check if matched gene is withdrawn or non-protein-coding
             gene_info = None
-            if eid and eid in ensembl_id_set:
-                gene_info = ensembl_id_to_row.loc[eid]
-                if isinstance(gene_info, pd.DataFrame):
-                    gene_info = gene_info.iloc[0]
-            elif pd.notna(match.get("source_id")):
-                sid_rows = gene_table[gene_table["source_id"] == match["source_id"]]
-                if len(sid_rows) > 0:
-                    gene_info = sid_rows.iloc[0]
+            if eid and eid in eid_to_gene:
+                gene_info = eid_to_gene[eid]
+            elif match.get("source_id") and match["source_id"] in sid_to_gene:
+                gene_info = sid_to_gene[match["source_id"]]
             if gene_info is not None:
-                if str(gene_info.get("status", "")).lower().startswith("entry withdrawn") or str(gene_info.get("status", "")).lower() == "withdrawn":
+                status_lower = str(gene_info.get("status", "")).lower()
+                if status_lower.startswith("entry withdrawn") or status_lower == "withdrawn":
                     confidence = "medium"
                     notes.append("Matched withdrawn gene")
                 gene_type = gene_info.get("gene_type", "")
                 if gene_type and "protein" not in str(gene_type).lower():
                     notes.append(f"Non-protein-coding gene type: {gene_type}")
-            _apply_match_from_lookup(result, idx, match, gene_table, "exact_symbol", confidence, notes)
+            _apply_lookup_match(result, idx, match, eid_to_gene, sid_to_gene,
+                                "exact_symbol", confidence, notes)
             continue
         elif len(matches) > 1:
-            candidates = matches["ensembl_id"].tolist()
+            candidates = [m["ensembl_id"] for m in matches]
             notes.append(f"Multiple approved symbol matches: {candidates}")
             result.at[idx, "mapping_status"] = "ambiguous"
             result.at[idx, "mapping_confidence"] = "low"
@@ -106,16 +157,25 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
             continue
 
         # Tier 4: Alias / previous symbol match
-        matches = alias_prev_lookup[alias_prev_lookup["lookup_string"] == feature_name]
-        unique_targets = matches.drop_duplicates(subset=["ensembl_id", "source_id"])
+        matches = alias_prev_dict.get(feature_name, [])
+        # Deduplicate by (ensembl_id, source_id) — same gene can appear as both alias and prev
+        seen_targets = {}
+        for m in matches:
+            key = (m["ensembl_id"], m["source_id"])
+            if key not in seen_targets:
+                seen_targets[key] = m
+
+        unique_targets = list(seen_targets.values())
         if len(unique_targets) == 1:
-            match = matches.iloc[0]
+            match = matches[0]  # use first occurrence for lookup_type
             lookup_type = match["lookup_type"]
             status = "alias_symbol" if lookup_type == "alias_symbol" else "previous_symbol"
-            _apply_match_from_lookup(result, idx, match, gene_table, status, "medium", notes)
+            _apply_lookup_match(result, idx, match, eid_to_gene, sid_to_gene,
+                                status, "medium", notes)
             continue
         elif len(unique_targets) > 1:
-            candidates = unique_targets[["ensembl_id", "source_id", "lookup_type"]].to_dict("records")
+            candidates = [{"ensembl_id": m["ensembl_id"], "source_id": m["source_id"],
+                           "lookup_type": m["lookup_type"]} for m in unique_targets]
             notes.append(f"Multiple alias/prev matches: {candidates}")
             result.at[idx, "mapping_status"] = "ambiguous"
             result.at[idx, "mapping_confidence"] = "low"
@@ -145,12 +205,11 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
     return HarmonizationResult(mapping_table=result, conflicts=conflicts, stats=stats)
 
 
-def _apply_match(result, idx, gene_row, status, confidence, source, notes):
-    # gene_row is a pandas Series from set_index("ensembl_id"), so the ensembl_id
-    # is the Series name (index label), not a column. Fall back to source_id if needed.
-    eid = gene_row.name if gene_row.name and pd.notna(gene_row.name) else gene_row.get("ensembl_id")
-    result.at[idx, "gene_id_harmonized"] = eid or gene_row.get("source_id", "")
-    result.at[idx, "gene_symbol_harmonized"] = gene_row.get("symbol", "")
+def _apply_gene_match(result, idx, gene_info, status, confidence, source, notes):
+    """Apply a match from pre-built gene_info dict."""
+    eid = gene_info.get("ensembl_id")
+    result.at[idx, "gene_id_harmonized"] = eid or gene_info.get("source_id", "")
+    result.at[idx, "gene_symbol_harmonized"] = gene_info.get("symbol", "")
     result.at[idx, "mapping_status"] = status
     result.at[idx, "mapping_confidence"] = confidence
     result.at[idx, "mapping_source"] = source
@@ -158,22 +217,20 @@ def _apply_match(result, idx, gene_row, status, confidence, source, notes):
         result.at[idx, "mapping_notes"] = "; ".join(notes)
 
 
-def _apply_match_from_lookup(result, idx, match, gene_table, status, confidence, notes):
+def _apply_lookup_match(result, idx, match, eid_to_gene, sid_to_gene, status, confidence, notes):
+    """Apply a match from symbol lookup, resolving symbol via gene info dicts."""
     eid = match.get("ensembl_id")
     sid = match.get("source_id")
     source_label = f"{match.get('source', '')}:{match.get('lookup_type', '')}"
 
+    # Resolve symbol
     symbol = ""
-    if pd.notna(eid):
-        gene_rows = gene_table[gene_table["ensembl_id"] == eid]
-        if len(gene_rows) > 0:
-            symbol = gene_rows.iloc[0]["symbol"]
-    if not symbol and pd.notna(sid):
-        gene_rows = gene_table[gene_table["source_id"] == sid]
-        if len(gene_rows) > 0:
-            symbol = gene_rows.iloc[0]["symbol"]
+    if eid and eid in eid_to_gene:
+        symbol = eid_to_gene[eid].get("symbol", "")
+    if not symbol and sid and sid in sid_to_gene:
+        symbol = sid_to_gene[sid].get("symbol", "")
 
-    harmonized_id = eid if pd.notna(eid) else sid
+    harmonized_id = eid if eid else sid
     result.at[idx, "gene_id_harmonized"] = harmonized_id
     result.at[idx, "gene_symbol_harmonized"] = symbol
     result.at[idx, "mapping_status"] = status
