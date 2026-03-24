@@ -10,70 +10,63 @@ Designed to be invoked as a Claude Code / Codex skill or used as a standalone Py
 
 ## Workflow
 
-```
-                        Input Dataset
-                     (.h5ad / .tsv / .csv)
-                             |
-                             v
-                   +-------------------+
-                   |  load_features()  |   Extract feature metadata
-                   +-------------------+   (not the expression matrix)
-                             |
-                             v
-                  +---------------------+
-                  | classify_features() |   Triage: gene vs non-gene
-                  +---------------------+
-                             |
-              +--------------+--------------+
-              |                             |
-              v                             v
-        Gene features               Non-gene features
-              |                    (antibody, CRISPR, spike-in,
-              |                     peaks, transcripts)
-              |                             |
-              v                             v
-     +------------------+           Labeled as non_gene_feature
-     | load_reference() |           and passed through
-     +------------------+
-              |
-              v
-     +------------------+
-     |   harmonize()    |   5-tier matching cascade
-     +------------------+
-              |
-     +--------+--------+---------+---------+--------+
-     |        |        |         |         |        |
-     v        v        v         v         v        v
-  Tier 1   Tier 2   Tier 3    Tier 4    Tier 5   Excel
-  Exact    ID no    Exact     Alias/    Unmapped  date
-   ID      version  symbol    prev sym           detect
-  (high)   (high)   (high)   (medium)
-              |
-              v
-    +--------------------+
-    |  HarmonizationResult  |
-    +--------------------+
-         |          |
-         v          v
-  +-------------+  +----------------+
-  | write_results| | write_reports()|
-  +-------------+  +----------------+
-         |                |
-         v                v
-  harmonization     summary.json
-  _table.tsv        conflicts.tsv
-  *_harmonized      unmapped.tsv
-    .h5ad
-                         |
-                         v
-              +---------------------+
-              | merge_features()    |   Optional, explicit opt-in
-              | (strict / symbol)   |
-              +---------------------+
-                         |
-                         v
-                   MergeResult
-              (merged_table + provenance)
+```mermaid
+flowchart TD
+    Input["Input Dataset\n(.h5ad / .tsv / .csv)"]
+    Load["load_features()\nExtract feature metadata"]
+    Classify["classify_features()\nTriage: gene vs non-gene"]
+    Gene["Gene features"]
+    NonGene["Non-gene features\n(antibody, CRISPR, spike-in,\npeaks, transcripts)"]
+    NonGeneLabel["Labeled non_gene_feature\nand passed through"]
+    LoadRef["load_reference()\nHGNC / MGI + BioMart"]
+    Harmonize["harmonize()\n5-tier matching cascade"]
+
+    T1["Tier 1\nExact ID\n(high)"]
+    T2["Tier 2\nID no version\n(high)"]
+    T3["Tier 3\nExact symbol\n(high)"]
+    T4["Tier 4\nAlias / prev sym\n(medium)"]
+    T5["Tier 5\nUnmapped"]
+    Excel["Excel date\ndetection"]
+
+    Result["HarmonizationResult"]
+    WriteResults["write_results()\nharmonization_table.tsv\n*_harmonized.h5ad"]
+    WriteReports["write_reports()\nsummary.json\nconflicts.tsv\nunmapped.tsv"]
+    Merge["merge_features()\nstrict / symbol policy"]
+    MergeOut["MergeResult\n(merged_table + provenance)"]
+
+    Input --> Load --> Classify
+    Classify --> Gene
+    Classify --> NonGene --> NonGeneLabel
+
+    Gene --> LoadRef --> Harmonize
+    Harmonize --> T1
+    Harmonize --> T2
+    Harmonize --> T3
+    Harmonize --> T4
+    Harmonize --> T5
+    Harmonize --> Excel
+
+    T1 --> Result
+    T2 --> Result
+    T3 --> Result
+    T4 --> Result
+    T5 --> Result
+    Excel --> Result
+
+    Result --> WriteResults
+    Result --> WriteReports
+    Result -.->|"optional\nexplicit opt-in"| Merge --> MergeOut
+
+    style Input fill:#e8f4f8,stroke:#2196F3
+    style Result fill:#e8f5e9,stroke:#4CAF50
+    style MergeOut fill:#e8f5e9,stroke:#4CAF50
+    style NonGeneLabel fill:#fff3e0,stroke:#FF9800
+    style T1 fill:#c8e6c9,stroke:#388E3C
+    style T2 fill:#c8e6c9,stroke:#388E3C
+    style T3 fill:#c8e6c9,stroke:#388E3C
+    style T4 fill:#fff9c4,stroke:#FBC02D
+    style T5 fill:#ffcdd2,stroke:#D32F2F
+    style Excel fill:#ffcdd2,stroke:#D32F2F
 ```
 
 ---
