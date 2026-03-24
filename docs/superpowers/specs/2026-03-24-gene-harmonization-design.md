@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-24
 **Project:** stangene
-**Status:** Draft
+**Status:** Reviewed
 
 ---
 
@@ -91,7 +91,7 @@ stangene/
 - `anndata` — h5ad I/O
 - `scanpy` — optional, for broader scRNA-seq workflows
 - `pandas` — tabular operations
-- `pyarrow` — parquet I/O (comes with pandas)
+- `pyarrow` — parquet I/O (explicit dependency, not assumed via pandas)
 - Standard library `urllib` for downloads (no `requests` dependency)
 
 ---
@@ -113,7 +113,7 @@ Extracts feature metadata only (not the expression matrix) into a standardized F
 
 **For h5ad:** Reads `adata.var` and `adata.var_names`. Extracts `gene_ids`, `feature_types`, `genome` columns if present. Infers `reference_source` and `reference_release` from `adata.uns` metadata or ID patterns.
 
-**For TSV/CSV:** Reads the table. Auto-detects common column names (`gene`, `gene_id`, `gene_name`, `feature_name`) or accepts explicit `column_map`.
+**For TSV/CSV:** Reads the table. Auto-detects common column names (`gene`, `gene_id`, `gene_name`, `feature_name`) or accepts explicit `column_map`. The `column_map` maps source column names to FeatureTable column names, e.g.: `column_map={"gene_name": "original_feature_name", "ensembl_id": "original_feature_id"}`.
 
 **FeatureTable schema:**
 
@@ -165,7 +165,9 @@ Adds/updates `original_feature_type` column.
 | Matches `chrN:start-end` | `peak` |
 | None of the above | `gene` (default, flagged in `mapping_notes`) |
 
-3. Non-gene features receive `mapping_status = non_gene_feature` immediately and skip the harmonization cascade.
+3. **Transcript features** are classified as `transcript` and treated as non-gene features in v1. They skip the harmonization cascade. A future version could add a Tier 0 that maps transcript IDs to parent gene IDs via an Ensembl transcript-to-gene table.
+
+4. All non-gene features (including transcripts) receive `mapping_status = non_gene_feature` immediately and skip the harmonization cascade.
 
 Patterns are defined as `(compiled_regex, feature_type)` tuples in `species.py` for extensibility.
 
@@ -191,6 +193,9 @@ class SpeciesConfig:
 **Mouse references:**
 - MGI marker list (`MRK_List2.rpt`, ~7MB) — approved symbols, synonyms, feature types.
 - MGI-to-Ensembl mapping (`MRK_ENSEMBL.rpt`) — links MGI IDs to Ensembl IDs.
+- Ensembl BioMart mouse gene table (supplementary) — fills Ensembl ID coverage gaps for mouse genes that lack an MGI-to-Ensembl mapping.
+
+**Fallback canonical key:** `ensembl_id` can be null in `gene_table.parquet`. For genes without an Ensembl ID (primarily mouse), `source_id` (e.g., `MGI:1234567`) serves as the fallback canonical key. In `gene_id_harmonized`, Ensembl ID is preferred; if unavailable, `source_id` is used instead, and `mapping_notes` records that the canonical key is a source-specific ID rather than an Ensembl ID.
 
 #### Reference build (`references.py`)
 
@@ -214,11 +219,15 @@ Downloads source files and produces normalized parquet tables:
 - `source` (str, HGNC/MGI)
 - `source_id` (str, HGNC:1234 or MGI:1234)
 
-**`symbol_lookup.parquet`** — flattened index, one row per (string → ensembl_id) mapping:
-- `lookup_string` (str)
-- `ensembl_id` (str)
+**`symbol_lookup.parquet`** — flattened index, one row per (string → gene) mapping:
+- `lookup_string` (str, stored in original case from source)
+- `lookup_string_upper` (str, uppercased for case-insensitive joins)
+- `ensembl_id` (str, nullable — null for genes without Ensembl mapping)
+- `source_id` (str, e.g. HGNC:1234 or MGI:1234 — always present)
 - `lookup_type` (str: `approved_symbol`, `alias_symbol`, `prev_symbol`)
 - `source` (str)
+
+The `lookup_string` preserves original case; `lookup_string_upper` enables efficient case-insensitive matching without full-table scans. Lookups join on `lookup_string` by default (case-sensitive) or `lookup_string_upper` when species config enables case-insensitive matching.
 
 This design makes the matching cascade a series of DataFrame joins.
 
@@ -257,6 +266,7 @@ If `feature_id_no_version` matches an `ensembl_id` in `gene_table` → `mapping_
 Look up `original_feature_name` in `symbol_lookup` where `lookup_type == "approved_symbol"`.
 - Exactly one match → `mapping_status = exact_symbol`, `mapping_confidence = high`.
 - Multiple matches → `mapping_status = ambiguous`.
+- If the match is against a withdrawn gene (status == "withdrawn" in `gene_table`), set `mapping_status = exact_symbol` but add `mapping_confidence = medium` and note "matched withdrawn gene" in `mapping_notes`.
 
 **Tier 4 — Alias / previous symbol match:**
 Look up `original_feature_name` in `symbol_lookup` where `lookup_type in ("alias_symbol", "prev_symbol")`.
@@ -266,12 +276,15 @@ Look up `original_feature_name` in `symbol_lookup` where `lookup_type in ("alias
 **Tier 5 — Unmapped:**
 `mapping_status = unmapped`, `mapping_confidence` = null.
 
+**Gene type filtering:** Tiers 3 and 4 do NOT filter by `gene_type` — all gene types (protein-coding, lncRNA, pseudogene, etc.) are eligible candidates. However, when a symbol match hits a non-protein-coding gene type or a withdrawn gene, this is recorded in `mapping_notes` as additional context. This avoids false negatives while preserving information for the user to review.
+
 #### Rules enforced
 
 - **Early exit:** Once resolved at a tier, skip lower tiers.
 - **No case coercion:** Matching is case-sensitive by default. Species-specific case-insensitive matching can be enabled for Tiers 3-4 only via `SpeciesConfig`, but original casing is always preserved.
 - **One-to-many:** If one original feature maps to multiple canonical genes → `ambiguous`.
 - **Many-to-one:** After the cascade, multiple original features mapping to the same `gene_id_harmonized` are flagged in the conflict report but NOT merged.
+- **Duplicate input features:** If the same `original_feature_name` appears multiple times in the input (common in CITE-seq / multi-modal data), each row is harmonized independently. If two duplicates resolve to the same `gene_id_harmonized`, they appear in the conflict report as many-to-one collisions.
 
 #### Output columns added to FeatureTable
 
@@ -321,6 +334,8 @@ class MergeResult:
     merge_log: list[str]           # human-readable decisions
 ```
 
+`write_reports()` also accepts `MergeResult` (via a `merge_result` kwarg). When provided, it additionally writes `merged_table.tsv` and `merge_provenance.tsv` to the output directory.
+
 ---
 
 ### 5.6 Reporting (`report.py`)
@@ -343,7 +358,9 @@ Flat table listing:
 - Many-to-one collisions (multiple originals → same harmonized ID)
 - One-to-many ambiguities (one original → multiple candidates)
 - Unmapped features
-- Suspicious symbols (known Excel-corruption-prone gene names like MARCH1, SEPT2, DEC1 — a curated list of ~30 names)
+- Suspicious symbols, detected by two checks:
+  - **Old renamed symbols:** Gene names that HGNC renamed in 2020 due to Excel corruption (e.g., MARCH1→MARCHF1, SEPT2→SEPTIN2). These are caught by Tier 4 as `previous_symbol` matches, but additionally flagged as Excel-related.
+  - **Date-like strings:** Regex detection of Excel-converted date formats (e.g., `1-Mar`, `2-Sep`, `1-Sep-2023`, `Sep-01`) that indicate the input was corrupted by spreadsheet software. These are marked `unmapped` with a note.
 - Likely outdated names (features resolved only via `previous_symbol`)
 
 ```python
@@ -377,10 +394,26 @@ def run(
 Wraps the full pipeline:
 1. `load_features(path, species, dataset_name)`
 2. `classify_features(ft)`
-3. `load_reference(species, reference_dir)` — builds if missing
+3. `load_reference(species, reference_dir)` — raises `ReferenceNotFoundError` if not built
 4. `harmonize(ft, ref)`
 5. `write_reports(result, output_dir)` — if `output_dir` provided
 6. Returns `HarmonizationResult`
+
+`run()` does NOT auto-build references. It raises a clear error directing the user to call `build_reference(species)` first. The Claude Code skill (Section 7) handles the build-if-missing logic as a separate explicit step.
+
+### CLI Entry Point
+
+A `python -m stangene` entry point using `argparse` (no extra dependency):
+
+```
+python -m stangene harmonize --input data.h5ad --species human --output-dir results/
+python -m stangene build-refs --species human [--force]
+```
+
+Defined in `src/stangene/__main__.py`. Also exposed via `pyproject.toml` `[project.scripts]` as:
+```
+stangene = "stangene.__main__:main"
+```
 
 ---
 
@@ -418,10 +451,11 @@ One row per original feature:
 | `gene_symbol_harmonized` | Official approved symbol |
 | `mapping_status` | Tier that resolved the mapping |
 | `mapping_confidence` | high / medium / low / null |
-| `mapping_source` | Reference resource used |
+| `mapping_source` | Which lookup resolved this feature (e.g., `HGNC:approved_symbol`, `MGI:alias_symbol`) |
 | `mapping_notes` | Free text: warnings, candidates, evidence |
-| `reference_source` | Annotation authority (HGNC, MGI, Ensembl) |
-| `reference_release` | Version/date of reference used |
+| `reference_source` | Original annotation of the input dataset (e.g., `GENCODE v32`, `Cell Ranger 2020-A`, inferred from input metadata) |
+| `reference_release` | Version/date of reference used for harmonization (from `build_metadata.json`) |
+| `stangene_version` | Version of stangene that produced this mapping |
 
 ---
 
