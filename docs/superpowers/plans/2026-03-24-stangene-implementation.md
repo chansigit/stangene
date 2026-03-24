@@ -1832,15 +1832,21 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
             match = matches.iloc[0]
             eid = match["ensembl_id"]
             confidence = "high"
-            # Check if matched gene is withdrawn
+            # Check if matched gene is withdrawn or non-protein-coding
+            gene_info = None
             if eid and eid in ensembl_id_set:
-                gene_row = ensembl_id_to_row.loc[eid]
-                if isinstance(gene_row, pd.DataFrame):
-                    gene_row = gene_row.iloc[0]
-                if str(gene_row.get("status", "")).lower().startswith("entry withdrawn") or str(gene_row.get("status", "")).lower() == "withdrawn":
+                gene_info = ensembl_id_to_row.loc[eid]
+                if isinstance(gene_info, pd.DataFrame):
+                    gene_info = gene_info.iloc[0]
+            elif pd.notna(match.get("source_id")):
+                sid_rows = gene_table[gene_table["source_id"] == match["source_id"]]
+                if len(sid_rows) > 0:
+                    gene_info = sid_rows.iloc[0]
+            if gene_info is not None:
+                if str(gene_info.get("status", "")).lower().startswith("entry withdrawn") or str(gene_info.get("status", "")).lower() == "withdrawn":
                     confidence = "medium"
                     notes.append("Matched withdrawn gene")
-                gene_type = gene_row.get("gene_type", "")
+                gene_type = gene_info.get("gene_type", "")
                 if gene_type and "protein" not in str(gene_type).lower():
                     notes.append(f"Non-protein-coding gene type: {gene_type}")
             _apply_match_from_lookup(result, idx, match, gene_table, "exact_symbol", confidence, notes)
