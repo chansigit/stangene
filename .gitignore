@@ -6,3 +6,7 @@ dist/
 build/
 .eggs/
 *.parquet
+docs/_build/
+.DS_Store
+data/
+output/

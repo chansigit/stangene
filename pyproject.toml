@@ -15,6 +15,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "scanpy>=1.9"]
+docs = [
+    "sphinx>=7.0",
+    "furo",
+    "myst-parser>=3.0",
+    "sphinx-copybutton",
+    "sphinx-autodoc-typehints",
+]
 
 [project.scripts]
 stangene = "stangene.__main__:main"
