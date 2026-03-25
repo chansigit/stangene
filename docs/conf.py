@@ -7,8 +7,8 @@ import sys
 sys.path.insert(0, os.path.abspath("../src"))
 
 project = "stangene"
-copyright = "2026, stangene contributors"
-author = "stangene contributors"
+copyright = "2026, Sijie Chen"
+author = "Sijie Chen"
 release = "0.1.0"
 
 extensions = [
