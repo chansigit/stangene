@@ -11,7 +11,7 @@ from stangene.references import (
     build_reference,
     load_reference,
 )
-from stangene.report import conflict_report, summary, write_reports
+from stangene.report import conflict_report, generate_markdown_report, summary, write_reports
 from stangene._logging import get_logger
 
 _logger = get_logger("run")
