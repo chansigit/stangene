@@ -1,10 +1,14 @@
 # stangene
 
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://chansigit.github.io/stangene/)
+
 Gene identifier harmonization for single-cell transcriptomics datasets.
 
 `stangene` maps gene features from individual datasets into a shared canonical gene identity system using a tiered matching cascade. It preserves all original information, tracks mapping provenance, and never silently forces ambiguous mappings.
 
 Designed to be invoked as a Claude Code / Codex skill or used as a standalone Python library and CLI tool.
+
+**Documentation:** https://chansigit.github.io/stangene/
 
 ---
 
