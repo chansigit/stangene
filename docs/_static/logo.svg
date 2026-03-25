@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90D9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7B68EE;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#50C878;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3CB371;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4A90D9;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#7B68EE;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#50C878;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="#0f1729" />
+  <circle cx="256" cy="256" r="236" fill="none" stroke="url(#grad3)" stroke-width="2" opacity="0.3" />
+
+  <!-- Left side: scattered/misaligned gene identifiers (disordered strands) -->
+  <!-- Strand 1 - wavy, offset -->
+  <path d="M 80 140 Q 120 120, 160 145 Q 200 170, 230 150"
+        stroke="#4A90D9" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <!-- Strand 2 - wavy, offset -->
+  <path d="M 70 190 Q 110 210, 155 188 Q 195 165, 230 195"
+        stroke="#E8725C" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <!-- Strand 3 - wavy, offset -->
+  <path d="M 85 245 Q 125 225, 165 250 Q 200 275, 230 245"
+        stroke="#F5A623" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <!-- Strand 4 - wavy, offset -->
+  <path d="M 75 300 Q 115 320, 160 295 Q 195 270, 230 300"
+        stroke="#50C878" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <!-- Strand 5 - wavy, offset -->
+  <path d="M 90 350 Q 130 330, 165 355 Q 200 380, 230 350"
+        stroke="#DA70D6" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- Central convergence zone: the harmonizer -->
+  <!-- Glowing vertical bar -->
+  <rect x="248" y="110" width="16" height="280" rx="8" fill="url(#grad3)" opacity="0.15"/>
+  <rect x="252" y="120" width="8" height="260" rx="4" fill="url(#grad3)" opacity="0.4"/>
+
+  <!-- Small diamond/node markers at convergence points -->
+  <circle cx="256" cy="150" r="5" fill="#4A90D9" opacity="0.9"/>
+  <circle cx="256" cy="200" r="5" fill="#E8725C" opacity="0.9"/>
+  <circle cx="256" cy="250" r="5" fill="#F5A623" opacity="0.9"/>
+  <circle cx="256" cy="300" r="5" fill="#50C878" opacity="0.9"/>
+  <circle cx="256" cy="350" r="5" fill="#DA70D6" opacity="0.9"/>
+
+  <!-- Right side: aligned, harmonized output (ordered strands) -->
+  <!-- All strands become straight, evenly spaced, same style -->
+  <line x1="280" y1="150" x2="430" y2="150"
+        stroke="#4A90D9" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+  <line x1="280" y1="200" x2="430" y2="200"
+        stroke="#4A90D9" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+  <line x1="280" y1="250" x2="430" y2="250"
+        stroke="#4A90D9" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+  <line x1="280" y1="300" x2="430" y2="300"
+        stroke="#4A90D9" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+  <line x1="280" y1="350" x2="430" y2="350"
+        stroke="#4A90D9" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+
+  <!-- Small ticks on harmonized lines (like barcode / ID markers) -->
+  <rect x="300" y="143" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="340" y="143" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="370" y="143" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="410" y="143" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+
+  <rect x="300" y="193" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="330" y="193" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="380" y="193" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="410" y="193" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+
+  <rect x="310" y="243" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="350" y="243" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="390" y="243" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="420" y="243" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+
+  <rect x="300" y="293" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="345" y="293" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="375" y="293" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="415" y="293" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+
+  <rect x="315" y="343" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="355" y="343" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="385" y="343" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+  <rect x="420" y="343" width="3" height="14" rx="1" fill="#7B68EE" opacity="0.7"/>
+
+  <!-- Text: stangene -->
+  <text x="256" y="440" text-anchor="middle"
+        font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-size="52" font-weight="600" letter-spacing="3"
+        fill="white">stangene</text>
+
+  <!-- Subtle tagline -->
+  <text x="256" y="468" text-anchor="middle"
+        font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-size="14" font-weight="300" letter-spacing="4"
+        fill="#8899aa">GENE HARMONIZATION</text>
+</svg>

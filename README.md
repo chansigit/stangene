@@ -1,6 +1,12 @@
 # stangene
 
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://chansigit.github.io/stangene/)
+<p align="center">
+  <img src="docs/_static/logo.svg" alt="stangene logo" width="200">
+</p>
+
+<p align="center">
+  <a href="https://chansigit.github.io/stangene/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>
+</p>
 
 Gene identifier harmonization for single-cell transcriptomics datasets.
 
