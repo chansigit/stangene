@@ -1,7 +1,7 @@
-# stangene
+# StanGene
 
 <p align="center">
-  <img src="docs/_static/logo.svg" alt="stangene logo" width="200">
+  <img src="docs/_static/logo.png" alt="StanGene logo" width="200">
 </p>
 
 <p align="center">
