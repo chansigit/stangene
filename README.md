@@ -5,7 +5,11 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/chansigit/stangene/actions/workflows/tests.yml"><img src="https://github.com/chansigit/stangene/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
   <a href="https://chansigit.github.io/stangene/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>
+  <a href="https://github.com/chansigit/stangene/blob/master/LICENSE"><img src="https://img.shields.io/github/license/chansigit/stangene" alt="License"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.9%2B-blue?logo=python&logoColor=white" alt="Python 3.9+"></a>
+  <a href="https://github.com/chansigit/stangene/stargazers"><img src="https://img.shields.io/github/stars/chansigit/stangene?style=social" alt="GitHub stars"></a>
 </p>
 
 Gene identifier harmonization for single-cell transcriptomics datasets.
