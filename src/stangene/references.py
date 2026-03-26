@@ -52,6 +52,8 @@ def build_reference(
         _build_human_reference(config, ref_dir)
     elif config.name == "mouse":
         _build_mouse_reference(config, ref_dir)
+    elif config.name == "rat":
+        _build_rat_reference(config, ref_dir)
     else:
         raise ValueError(f"No reference builder for species: {species}")
 
@@ -287,3 +289,89 @@ def _build_mouse_reference(config, ref_dir: str) -> None:
 
     _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
     logger.info("Built mouse reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))
+
+
+def _build_rat_reference(config, ref_dir: str) -> None:
+    """Build rat reference from RGD (Rat Genome Database) gene file."""
+    url = config.reference_sources["rgd_genes"]["url"]
+    raw_data = _download_file(url)
+    checksum = hashlib.sha256(raw_data).hexdigest()
+
+    # RGD file has comment lines starting with '#'; actual header is the first non-comment line
+    lines = raw_data.decode("utf-8", errors="replace").split("\n")
+    data_start = next(i for i, l in enumerate(lines) if not l.startswith("#") and l.strip())
+    rgd = pd.read_csv(
+        io.StringIO("\n".join(lines[data_start:])),
+        sep="\t",
+        low_memory=False,
+    )
+    rgd.columns = rgd.columns.str.strip()
+
+    # Map RGD nomenclature status to internal status
+    _RGD_STATUS_MAP = {
+        "APPROVED": "approved",
+        "PROVISIONAL": "provisional",
+        "INTERIM": "provisional",
+    }
+
+    rows = []
+    for _, gene in rgd.iterrows():
+        symbol = str(gene["SYMBOL"]).strip() if pd.notna(gene.get("SYMBOL")) else ""
+        if not symbol:
+            continue
+
+        # RGD ENSEMBL_ID column may contain multiple IDs separated by ';'
+        # Use the first canonical ENSRNOG ID
+        ensembl_id = None
+        raw_ens = str(gene.get("ENSEMBL_ID", "")).strip() if pd.notna(gene.get("ENSEMBL_ID")) else ""
+        if raw_ens:
+            candidates = [e.strip() for e in raw_ens.split(";") if e.strip().startswith("ENSRNOG")]
+            if candidates:
+                ensembl_id = candidates[0]
+
+        gene_type = str(gene.get("GENE_TYPE", "")).strip() if pd.notna(gene.get("GENE_TYPE")) else ""
+
+        # OLD_SYMBOL contains previous names (';'-separated) — map to prev_symbols
+        old_symbols = str(gene.get("OLD_SYMBOL", "")).strip() if pd.notna(gene.get("OLD_SYMBOL")) else ""
+        prev_symbols = "|".join(
+            s.strip() for s in old_symbols.split(";") if s.strip()
+        ) if old_symbols else ""
+
+        # Map nomenclature status
+        raw_status = str(gene.get("NOMENCLATURE_STATUS", "")).strip().upper() if pd.notna(gene.get("NOMENCLATURE_STATUS")) else ""
+        status = _RGD_STATUS_MAP.get(raw_status, "provisional")
+
+        # Build source_id with RGD: prefix
+        rgd_id = ""
+        if pd.notna(gene.get("GENE_RGD_ID")):
+            try:
+                rgd_id = f"RGD:{int(gene['GENE_RGD_ID'])}"
+            except (ValueError, TypeError):
+                rgd_id = f"RGD:{gene['GENE_RGD_ID']}"
+
+        rows.append({
+            "ensembl_id": ensembl_id,
+            "symbol": symbol,
+            "alias_symbols": "",
+            "prev_symbols": prev_symbols,
+            "gene_type": gene_type,
+            "status": status,
+            "source": "RGD",
+            "source_id": rgd_id,
+        })
+
+    gene_table = pd.DataFrame(rows)
+    symbol_lookup = _build_symbol_lookup(gene_table, source="RGD")
+
+    metadata = {
+        "species": "rat",
+        "download_timestamp": datetime.now(timezone.utc).isoformat(),
+        "sources": {
+            "rgd_genes": {"url": url, "sha256": checksum, "rows": len(rgd)},
+        },
+        "gene_count": len(gene_table),
+        "lookup_count": len(symbol_lookup),
+    }
+
+    _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
+    logger.info("Built rat reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))

@@ -11,6 +11,7 @@ from stangene._logging import get_logger
 logger = get_logger("io")
 
 # Regex to strip Ensembl version suffix: ENSG00000141510.18 -> ENSG00000141510
+# Handles human (ENSG), mouse (ENSMUSG), rat (ENSRNOG), and other species
 _VERSION_SUFFIX = re.compile(r"^(ENS[A-Z]*G\d+)\.\d+$")
 
 # Common column names auto-detected for TSV/CSV files

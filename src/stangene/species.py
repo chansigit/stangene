@@ -21,9 +21,11 @@ CLASSIFICATION_PATTERNS: list[tuple[re.Pattern, str]] = [
     # Transcript IDs (check before gene IDs since ENST is a subset prefix-wise)
     (re.compile(r"^ENST\d+", re.IGNORECASE), "transcript"),
     (re.compile(r"^ENSMUST\d+", re.IGNORECASE), "transcript"),
+    (re.compile(r"^ENSRNOT\d+", re.IGNORECASE), "transcript"),
     # Ensembl gene IDs
     (re.compile(r"^ENSG\d+", re.IGNORECASE), "gene"),
     (re.compile(r"^ENSMUSG\d+", re.IGNORECASE), "gene"),
+    (re.compile(r"^ENSRNOG\d+", re.IGNORECASE), "gene"),
     # Antibody capture / protein tags
     (re.compile(r".*TotalSeq", re.IGNORECASE), "antibody_capture"),
     (re.compile(r".*_ADT$", re.IGNORECASE), "antibody_capture"),
@@ -91,6 +93,18 @@ _SPECIES_CONFIGS: dict[str, SpeciesConfig] = {
             "ensembl_biomart": {
                 "url": "https://www.ensembl.org/biomart/martservice?query=",
                 "description": "Ensembl BioMart mouse gene table (supplementary)",
+            },
+        },
+    ),
+    "rat": SpeciesConfig(
+        name="rat",
+        ensembl_prefix="ENSRNOG",
+        transcript_prefix="ENSRNOT",
+        naming_convention="capitalized",
+        reference_sources={
+            "rgd_genes": {
+                "url": "https://download.rgd.mcw.edu/data_release/RAT/GENES_RAT.txt",
+                "description": "RGD rat gene file with approved symbols, synonyms, and Ensembl IDs",
             },
         },
     ),

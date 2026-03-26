@@ -196,3 +196,94 @@ def test_build_mouse_symbol_lookup(ref_dir, mock_mgi_markers_data, mock_mgi_ense
 
     p53_alias = sl[(sl["lookup_string"] == "p53") & (sl["lookup_type"] == "alias_symbol")]
     assert len(p53_alias) == 1
+
+
+# ---------------------------------------------------------------------------
+# Rat (RGD) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_rgd_data():
+    """Minimal RGD GENES_RAT.txt format with comment header."""
+    return (
+        "# RGD-PIPELINE: ftp-file-extracts\n"
+        "# MODULE: genes  build 2024-06-24\n"
+        "#\n"
+        "GENE_RGD_ID\tSYMBOL\tNAME\tGENE_DESC\tCHROMOSOME_CELERA\tCHROMOSOME_mRatBN7.2\tCHROMOSOME_RGSC_v3.4\tFISH_BAND\tSTART_POS_CELERA\tSTOP_POS_CELERA\tSTRAND_CELERA\tSTART_POS_mRatBN7.2\tSTOP_POS_mRatBN7.2\tSTRAND_mRatBN7.2\tSTART_POS_RGSC_v3.4\tSTOP_POS_RGSC_v3.4\tSTRAND_RGSC_v3.4\tCURATED_REF_RGD_ID\tCURATED_REF_PUBMED_ID\tUNCURATED_PUBMED_ID\tNCBI_GENE_ID\tUNIPROT_ID\tGENE_REFSEQ_STATUS\tGENBANK_NUCLEOTIDE\tTIGR_ID\tGENBANK_PROTEIN\tCANONICAL_PROTEIN\tMARKER_RGD_ID\tMARKER_SYMBOL\tOLD_SYMBOL\tOLD_NAME\tQTL_RGD_ID\tQTL_SYMBOL\tNOMENCLATURE_STATUS\tSPLICE_RGD_ID\tSPLICE_SYMBOL\tGENE_TYPE\tENSEMBL_ID\n"
+        "2003\tAsip\tagouti signaling protein\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tA;ASP\t\t\t\tAPPROVED\t\t\tprotein-coding\tENSRNOG00000017701\n"
+        "2004\tA2m\talpha-2-macroglobulin\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tA2MAC1;Mam\t\t\t\tPROVISIONAL\t\t\tprotein-coding\tENSRNOG00000028896;ENSRNOG00000045772\n"
+        "9999\tNoEnsGene\tgene without ensembl\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tAPPROVED\t\t\tprotein-coding\t\n"
+    )
+
+
+def test_build_rat_creates_files(ref_dir, mock_rgd_data):
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_rgd_data.encode("utf-8")
+        build_reference("rat", reference_dir=ref_dir)
+
+    rat_dir = os.path.join(ref_dir, "rat")
+    assert os.path.exists(os.path.join(rat_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(rat_dir, "symbol_lookup.parquet"))
+    assert os.path.exists(os.path.join(rat_dir, "build_metadata.json"))
+
+
+def test_build_rat_gene_table(ref_dir, mock_rgd_data):
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_rgd_data.encode("utf-8")
+        build_reference("rat", reference_dir=ref_dir)
+
+    ref = load_reference("rat", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    # Asip should have Ensembl ID (first ENSRNOG from the field)
+    asip = gt[gt["symbol"] == "Asip"]
+    assert len(asip) == 1
+    assert asip.iloc[0]["ensembl_id"] == "ENSRNOG00000017701"
+    assert asip.iloc[0]["source_id"] == "RGD:2003"
+    assert asip.iloc[0]["status"] == "approved"
+
+    # A2m has multiple Ensembl IDs — should pick the first ENSRNOG one
+    a2m = gt[gt["symbol"] == "A2m"]
+    assert len(a2m) == 1
+    assert a2m.iloc[0]["ensembl_id"] == "ENSRNOG00000028896"
+    assert a2m.iloc[0]["status"] == "provisional"
+
+    # NoEnsGene has no Ensembl ID — ensembl_id should be null
+    no_ens = gt[gt["symbol"] == "NoEnsGene"]
+    assert len(no_ens) == 1
+    assert pd.isna(no_ens.iloc[0]["ensembl_id"])
+    assert no_ens.iloc[0]["source_id"] == "RGD:9999"
+
+
+def test_build_rat_symbol_lookup(ref_dir, mock_rgd_data):
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_rgd_data.encode("utf-8")
+        build_reference("rat", reference_dir=ref_dir)
+
+    ref = load_reference("rat", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    # Approved symbol
+    asip_approved = sl[(sl["lookup_string"] == "Asip") & (sl["lookup_type"] == "approved_symbol")]
+    assert len(asip_approved) == 1
+
+    # OLD_SYMBOL should be in prev_symbol (not alias_symbol)
+    asp_prev = sl[(sl["lookup_string"] == "ASP") & (sl["lookup_type"] == "prev_symbol")]
+    assert len(asp_prev) == 1
+    assert asp_prev.iloc[0]["source_id"] == "RGD:2003"
+
+    # A2m's old symbols should also be prev_symbol
+    mam_prev = sl[(sl["lookup_string"] == "Mam") & (sl["lookup_type"] == "prev_symbol")]
+    assert len(mam_prev) == 1
+
+
+def test_build_rat_metadata(ref_dir, mock_rgd_data):
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_rgd_data.encode("utf-8")
+        build_reference("rat", reference_dir=ref_dir)
+
+    meta_path = os.path.join(ref_dir, "rat", "build_metadata.json")
+    with open(meta_path) as f:
+        meta = json.load(f)
+    assert meta["species"] == "rat"
+    assert "rgd_genes" in meta["sources"]

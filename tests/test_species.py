@@ -17,6 +17,14 @@ def test_get_mouse_config():
     assert cfg.naming_convention == "capitalized"
 
 
+def test_get_rat_config():
+    cfg = get_species_config("rat")
+    assert cfg.name == "rat"
+    assert cfg.ensembl_prefix == "ENSRNOG"
+    assert cfg.transcript_prefix == "ENSRNOT"
+    assert cfg.naming_convention == "capitalized"
+
+
 def test_unknown_species_raises():
     import pytest
     with pytest.raises(ValueError, match="Unknown species"):
