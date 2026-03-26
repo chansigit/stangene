@@ -27,8 +27,10 @@ def _build_lookup_dicts(symbol_lookup: pd.DataFrame):
         approved_dict: {lookup_string: [list of matching rows as dicts]}
         alias_prev_dict: {lookup_string: [list of matching rows as dicts]}
     """
-    approved_dict = defaultdict(list)
+    approved_dict = defaultdict(list)       # exact case
+    approved_dict_upper = defaultdict(list)  # uppercase fallback
     alias_prev_dict = defaultdict(list)
+    alias_prev_dict_upper = defaultdict(list)
 
     for row in symbol_lookup.itertuples(index=False):
         entry = {
@@ -38,12 +40,16 @@ def _build_lookup_dicts(symbol_lookup: pd.DataFrame):
             "lookup_type": row.lookup_type,
             "source": row.source,
         }
+        upper_key = row.lookup_string_upper if pd.notna(row.lookup_string_upper) else row.lookup_string.upper()
         if row.lookup_type == "approved_symbol":
             approved_dict[row.lookup_string].append(entry)
+            approved_dict_upper[upper_key].append(entry)
         else:
             alias_prev_dict[row.lookup_string].append(entry)
+            alias_prev_dict_upper[upper_key].append(entry)
 
-    return dict(approved_dict), dict(alias_prev_dict)
+    return (dict(approved_dict), dict(approved_dict_upper),
+            dict(alias_prev_dict), dict(alias_prev_dict_upper))
 
 
 def _build_gene_info_dicts(gene_table: pd.DataFrame):
@@ -85,7 +91,7 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
     # Build O(1) lookup structures
     ensembl_id_set = set(gene_table["ensembl_id"].dropna())
     eid_to_gene, sid_to_gene = _build_gene_info_dicts(gene_table)
-    approved_dict, alias_prev_dict = _build_lookup_dicts(symbol_lookup)
+    approved_dict, approved_dict_upper, alias_prev_dict, alias_prev_dict_upper = _build_lookup_dicts(symbol_lookup)
 
     logger.info("Built lookup dicts: %d ensembl IDs, %d approved symbols, %d alias/prev entries",
                 len(ensembl_id_set), len(approved_dict), len(alias_prev_dict))
@@ -125,8 +131,10 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
                               f"{gene_info.get('source_id', 'HGNC')}:id_no_version", notes)
             continue
 
-        # Tier 3: Exact approved symbol match
+        # Tier 3: Exact approved symbol match (case-sensitive first, then uppercase fallback)
         matches = approved_dict.get(feature_name, [])
+        if not matches:
+            matches = approved_dict_upper.get(feature_name.upper(), [])
         if len(matches) == 1:
             match = matches[0]
             eid = match["ensembl_id"]
@@ -156,8 +164,10 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
             result.at[idx, "mapping_notes"] = "; ".join(notes)
             continue
 
-        # Tier 4: Alias / previous symbol match
+        # Tier 4: Alias / previous symbol match (case-sensitive first, then uppercase fallback)
         matches = alias_prev_dict.get(feature_name, [])
+        if not matches:
+            matches = alias_prev_dict_upper.get(feature_name.upper(), [])
         # Deduplicate by (ensembl_id, source_id) — same gene can appear as both alias and prev
         seen_targets = {}
         for m in matches:
@@ -167,9 +177,10 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
 
         unique_targets = list(seen_targets.values())
         if len(unique_targets) == 1:
-            match = matches[0]  # use first occurrence for lookup_type
-            lookup_type = match["lookup_type"]
-            status = "alias_symbol" if lookup_type == "alias_symbol" else "previous_symbol"
+            # Prefer alias_symbol over previous_symbol deterministically
+            has_alias = any(m["lookup_type"] == "alias_symbol" for m in matches)
+            status = "alias_symbol" if has_alias else "previous_symbol"
+            match = matches[0]
             _apply_lookup_match(result, idx, match, eid_to_gene, sid_to_gene,
                                 status, "medium", notes)
             continue

@@ -85,10 +85,8 @@ def load_features(
     ft["reference_source"] = _infer_reference_source(ft.get("original_feature_id"))
     ft["reference_release"] = None
 
-    logger.info(
-        "Loaded %d features from %s (species=%s, dataset=%s)",
-        len(ft), path, species, ft["dataset"].iloc[0],
-    )
+    ds_label = ft["dataset"].iloc[0] if len(ft) > 0 else (dataset_name or "empty")
+    logger.info("Loaded %d features from %s (species=%s, dataset=%s)", len(ft), path, species, ds_label)
     return ft
 
 
@@ -140,14 +138,20 @@ def write_results(
     input_path: str = None,
     overwrite_h5ad: bool = False,
 ) -> None:
-    """Write harmonization results to disk."""
+    """Write harmonization results to disk.
+
+    Writes harmonization_table.tsv and, if the input was h5ad,
+    an enriched copy with harmonization columns in adata.var.
+    """
     os.makedirs(output_dir, exist_ok=True)
 
-    result.mapping_table.to_csv(
-        os.path.join(output_dir, "harmonization_table.tsv"), sep="\t", index=False,
-    )
-    logger.info("Wrote harmonization_table.tsv to %s", output_dir)
+    # Write TSV mapping table
+    tsv_path = os.path.join(output_dir, "harmonization_table.tsv")
+    if not os.path.exists(tsv_path):
+        result.mapping_table.to_csv(tsv_path, sep="\t", index=False)
+        logger.info("Wrote harmonization_table.tsv to %s", output_dir)
 
+    # Write enriched h5ad if applicable
     if input_path and os.path.splitext(input_path)[1].lower() in (".h5ad", ".h5"):
         _write_enriched_h5ad(result, input_path, output_dir, overwrite_h5ad)
 
@@ -157,6 +161,13 @@ def _write_enriched_h5ad(result, input_path: str, output_dir: str, overwrite: bo
     adata = anndata.read_h5ad(input_path)
 
     mt = result.mapping_table.set_index("original_feature_name")
+    if mt.index.duplicated().any():
+        dup_names = mt.index[mt.index.duplicated(keep=False)].unique().tolist()
+        logger.warning(
+            "Duplicate feature names in mapping table (%d names); "
+            "only the first occurrence will be used for h5ad enrichment: %s",
+            len(dup_names), dup_names[:10],
+        )
     harm_cols = [
         "gene_id_harmonized", "gene_symbol_harmonized",
         "mapping_status", "mapping_confidence", "mapping_source", "mapping_notes",

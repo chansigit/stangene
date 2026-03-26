@@ -21,8 +21,17 @@ class ReferenceNotFoundError(Exception):
 
 
 def _default_reference_dir() -> str:
-    """Return the default reference directory (project-relative)."""
-    return os.path.join(os.path.dirname(__file__), "..", "..", "references")
+    """Return the default reference directory.
+
+    Uses project-relative 'references/' if it exists (dev mode),
+    otherwise falls back to ~/.cache/stangene/references.
+    """
+    project_dir = os.path.join(os.path.dirname(__file__), "..", "..", "references")
+    if os.path.isdir(project_dir):
+        return project_dir
+    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "stangene", "references")
+    os.makedirs(cache_dir, exist_ok=True)
+    return cache_dir
 
 
 def _download_file(url: str) -> bytes:
@@ -71,9 +80,11 @@ def load_reference(
     lookup_path = os.path.join(ref_dir, "symbol_lookup.parquet")
     meta_path = os.path.join(ref_dir, "build_metadata.json")
 
-    if not os.path.exists(gene_table_path):
+    missing = [p for p in [gene_table_path, lookup_path, meta_path] if not os.path.exists(p)]
+    if missing:
         raise ReferenceNotFoundError(
-            f"Reference data for '{species}' not found at {ref_dir}. "
+            f"Reference data for '{species}' incomplete at {ref_dir}. "
+            f"Missing: {[os.path.basename(p) for p in missing]}. "
             f"Run stangene.references.build_reference('{species}') first."
         )
 
@@ -199,12 +210,20 @@ def _build_mouse_reference(config, ref_dir: str) -> None:
             ens_id = row[eid_col[0]]
             if pd.notna(mgi_id) and pd.notna(ens_id) and str(ens_id).startswith("ENSMUSG"):
                 mgi_to_ensembl[str(mgi_id)] = str(ens_id)
+    else:
+        logger.warning("MGI-Ensembl mapping columns not found. Expected 'Ensembl Gene ID' and 'MGI Marker Accession ID'. Found: %s", list(ensembl_map.columns))
+
+    def _find_col(df, pattern, label):
+        matches = [c for c in df.columns if pattern in c.lower()]
+        if not matches:
+            raise ValueError(f"Expected column containing '{label}' not found in {list(df.columns)}")
+        return matches[0]
 
     # Build gene table
-    sym_col = [c for c in markers.columns if "marker symbol" in c.lower()][0]
-    status_col = [c for c in markers.columns if "status" in c.lower()][0]
-    type_col = [c for c in markers.columns if "feature type" in c.lower()][0]
-    mgi_col = [c for c in markers.columns if "mgi accession" in c.lower()][0]
+    sym_col = _find_col(markers, "marker symbol", "Marker Symbol")
+    status_col = _find_col(markers, "status", "Status")
+    type_col = _find_col(markers, "feature type", "Feature Type")
+    mgi_col = _find_col(markers, "mgi accession", "MGI Accession")
     syn_col = [c for c in markers.columns if "synonym" in c.lower()][0]
 
     rows = []
