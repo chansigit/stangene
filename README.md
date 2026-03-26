@@ -14,7 +14,7 @@
 
 Gene identifier harmonization for single-cell transcriptomics datasets.
 
-`stangene` maps gene features from individual datasets into a shared canonical gene identity system using a tiered matching cascade. It preserves all original information, tracks mapping provenance, and never silently forces ambiguous mappings.
+StanGene maps gene features from individual datasets into a shared canonical gene identity system using a tiered matching cascade. It preserves all original information, tracks mapping provenance, and never silently forces ambiguous mappings.
 
 Designed to be invoked as a Claude Code / Codex skill or used as a standalone Python library and CLI tool.
 
@@ -32,7 +32,7 @@ flowchart TD
     Gene["Gene features"]
     NonGene["Non-gene features\n(antibody, CRISPR, spike-in,\npeaks, transcripts)"]
     NonGeneLabel["Labeled non_gene_feature\nand passed through"]
-    LoadRef["load_reference()\nHGNC / MGI + BioMart"]
+    LoadRef["load_reference()\nHGNC / MGI / RGD"]
     Harmonize["harmonize()\n5-tier matching cascade"]
 
     T1["Tier 1\nExact ID\n(high)"]
@@ -44,7 +44,7 @@ flowchart TD
 
     Result["HarmonizationResult"]
     WriteResults["write_results()\nharmonization_table.tsv\n*_harmonized.h5ad"]
-    WriteReports["write_reports()\nsummary.json\nconflicts.tsv\nunmapped.tsv"]
+    WriteReports["write_reports()\nsummary.json\nconflicts.tsv\nunmapped.tsv\nreport.md"]
     Merge["merge_features()\nstrict / symbol policy"]
     MergeOut["MergeResult\n(merged_table + provenance)"]
 
@@ -105,6 +105,7 @@ pip install -e ".[dev]"
 ```bash
 stangene build-refs --species human   # downloads HGNC (~15 MB)
 stangene build-refs --species mouse   # downloads MGI + BioMart (~10 MB)
+stangene build-refs --species rat     # downloads RGD (~5 MB)
 ```
 
 Or from Python:
@@ -113,9 +114,10 @@ Or from Python:
 from stangene import build_reference
 build_reference("human")
 build_reference("mouse")
+build_reference("rat")
 ```
 
-References are stored in a local `references/` directory (gitignored by default). Re-run with `--force` to update.
+References are stored locally (in `references/` during development, or `~/.cache/stangene/references` when pip-installed). Re-run with `--force` to update.
 
 ### 2. Harmonize a dataset
 
@@ -123,8 +125,8 @@ References are stored in a local `references/` directory (gitignored by default)
 import stangene
 
 result = stangene.run(
-    path="my_data.h5ad",       # or .tsv / .csv
-    species="human",            # or "mouse"
+    path="my_data.h5ad",       # or .tsv / .csv / .txt
+    species="human",            # or "mouse" or "rat"
     output_dir="results/",      # where to write reports
     dataset_name="pbmc_10k",    # optional label
 )
@@ -141,7 +143,8 @@ stangene harmonize --input my_data.h5ad --species human --output-dir results/
 | File | Contents |
 |---|---|
 | `harmonization_table.tsv` | Full mapping table, one row per original feature |
-| `summary.json` | Dataset-level statistics |
+| `report.md` | Human-readable markdown report with summary, conflicts, and warnings |
+| `summary.json` | Dataset-level statistics as JSON |
 | `conflicts.tsv` | Many-to-one collisions, ambiguities, outdated names |
 | `unmapped.tsv` | Unmapped features for manual review |
 | `*_harmonized.h5ad` | Enriched h5ad with harmonization columns in `adata.var` (if input was h5ad) |
@@ -156,8 +159,8 @@ Before harmonization, every feature is classified:
 
 | Pattern | Type |
 |---|---|
-| `ENSG*` / `ENSMUSG*` | `gene` |
-| `ENST*` / `ENSMUST*` | `transcript` |
+| `ENSG*` / `ENSMUSG*` / `ENSRNOG*` | `gene` |
+| `ENST*` / `ENSMUST*` / `ENSRNOT*` | `transcript` |
 | `*_ADT`, `*_HTO`, `*TotalSeq*` | `antibody_capture` |
 | `sg-*`, `gRNA-*` | `crispr_guide` |
 | `ERCC-*` | `spike_in` |
@@ -179,6 +182,8 @@ Gene features are matched in strict priority order. Once a feature is resolved a
 | 4 | Alias or previous symbol | medium | `p53` matches via HGNC alias for TP53 |
 | 5 | Unmapped | -- | No confident match; preserved as-is |
 
+**Symbol matching is case-insensitive**: exact case is tried first, then uppercase fallback. This ensures `tp53`, `Tp53`, and `TP53` all resolve correctly.
+
 **Additional checks at each tier:**
 - Withdrawn genes matched at Tier 3 are downgraded to `medium` confidence
 - Non-protein-coding gene types are noted in `mapping_notes`
@@ -191,13 +196,13 @@ Every feature receives these harmonization columns:
 
 | Column | Description |
 |---|---|
-| `gene_id_harmonized` | Canonical Ensembl gene ID (or MGI source_id fallback) |
+| `gene_id_harmonized` | Canonical Ensembl gene ID (or source_id fallback, e.g. `RGD:2003`) |
 | `gene_symbol_harmonized` | Official approved symbol |
 | `mapping_status` | `exact_id`, `id_no_version`, `exact_symbol`, `alias_symbol`, `previous_symbol`, `ambiguous`, `unmapped`, or `non_gene_feature` |
 | `mapping_confidence` | `high`, `medium`, `low`, or null |
 | `mapping_source` | Which lookup resolved this feature (e.g., `HGNC:approved_symbol`) |
 | `mapping_notes` | Warnings, candidate lists, version mismatches |
-| `stangene_version` | Version of stangene that produced the mapping |
+| `stangene_version` | Version of StanGene that produced the mapping |
 | `reference_release` | Timestamp of the reference data used |
 
 Original columns (`original_feature_name`, `original_feature_id`, `original_feature_type`, `feature_id_no_version`) are always preserved.
@@ -225,6 +230,7 @@ result = stangene.harmonize(ft, ref)
 # Reporting
 stats = stangene.summary(result)
 conflicts = stangene.conflict_report(result)
+md_report = stangene.generate_markdown_report(result)
 stangene.write_reports(result, output_dir)
 
 # Optional merge
@@ -283,20 +289,13 @@ Every merge is recorded in `merge_result.provenance` with the original rows and 
 
 ---
 
-## Reference data
+## Supported species
 
-### Human (HGNC)
-
-Source: [HGNC complete gene set](https://ftp.ebi.ac.uk/pub/databases/genenames/hgnc/tsv/hgnc_complete_set.txt) (~15 MB)
-
-Provides: approved symbols, alias symbols, previous symbols, Ensembl gene IDs, HGNC IDs, gene types, approval status.
-
-### Mouse (MGI + Ensembl BioMart)
-
-Sources:
-- [MGI marker list](https://www.informatics.jax.org/downloads/reports/MRK_List2.rpt) (~7 MB) -- symbols, synonyms, feature types
-- [MGI-to-Ensembl mapping](https://www.informatics.jax.org/downloads/reports/MRK_ENSEMBL.rpt) -- MGI ID to Ensembl ID links
-- Ensembl BioMart (supplementary) -- fills Ensembl ID gaps for mouse genes not covered by MGI mapping
+| Species | Reference source | Canonical ID | Naming convention |
+|---|---|---|---|
+| Human | [HGNC](https://www.genenames.org/) (~15 MB) | Ensembl (`ENSG*`) | UPPERCASE (`TP53`) |
+| Mouse | [MGI](https://www.informatics.jax.org/) + Ensembl BioMart (~10 MB) | Ensembl (`ENSMUSG*`) | Capitalized (`Trp53`) |
+| Rat | [RGD](https://rgd.mcw.edu/) (~5 MB) | Ensembl (`ENSRNOG*`) | Capitalized (`Asip`) |
 
 ### Reference internals
 
@@ -317,7 +316,7 @@ references/<species>/
 
 ## Conflict detection
 
-The conflict report (`conflicts.tsv`) flags:
+The conflict report (`conflicts.tsv`) and markdown report (`report.md`) flag:
 
 | Conflict type | Description |
 |---|---|
@@ -340,7 +339,7 @@ Reads `adata.var` metadata. Extracts `gene_ids`, `feature_types`, and `genome` c
 
 When writing results, harmonization columns are added to `adata.var` in a new `*_harmonized.h5ad` file. Original `var_names` are never overwritten.
 
-### TSV / CSV
+### TSV / CSV / TXT
 
 Reads the table and auto-detects common column names:
 
@@ -349,6 +348,8 @@ Reads the table and auto-detects common column names:
 | `gene`, `gene_name`, `feature_name`, `gene_symbol`, `symbol` | `original_feature_name` |
 | `gene_id`, `gene_ids`, `ensembl_id`, `ensembl_gene_id`, `feature_id` | `original_feature_id` |
 | `feature_types`, `feature_type` | `original_feature_type` |
+
+If no column names are recognized, the first column is used as `original_feature_name`.
 
 Or pass an explicit `column_map`:
 
@@ -359,6 +360,8 @@ ft = stangene.load_features(
     column_map={"my_gene_col": "original_feature_name", "my_id_col": "original_feature_id"},
 )
 ```
+
+File extension determines the delimiter: `.tsv`/`.txt` = tab, `.csv` = comma.
 
 ---
 
@@ -376,24 +379,28 @@ ft = stangene.load_features(
 ## Adding a new species
 
 1. Add a `SpeciesConfig` entry in `src/stangene/species.py` with the species' Ensembl prefix, naming convention, and reference source URLs.
-2. Add classification patterns if needed (e.g., new Ensembl prefix patterns).
+2. Add classification patterns if needed (e.g., new Ensembl prefix patterns for both gene and transcript IDs).
 3. Implement a `_build_<species>_reference()` function in `references.py` that downloads source files, builds `gene_table` and `symbol_lookup` DataFrames, and calls `_save_reference()`.
 4. Add the dispatch to `build_reference()`.
+
+See the [rat (RGD) implementation](src/stangene/references.py) for a complete example.
 
 ---
 
 ## Testing
 
 ```bash
+# Run unit tests (fast, no network)
+python -m pytest tests/ --ignore=tests/test_pbmc3k.py -v
+
+# Run integration tests with real data (requires network + scanpy)
+python -m pytest tests/test_pbmc3k.py -v
+
 # Run all tests
 python -m pytest tests/ -v
-
-# Run specific module tests
-python -m pytest tests/test_harmonize.py -v
-python -m pytest tests/test_references.py -v
 ```
 
-70 tests covering: species config, feature classification, I/O adapters, human/mouse reference building, all 5 harmonization tiers, Excel corruption detection, withdrawn gene handling, conservative merge, reporting, and end-to-end integration.
+103 unit tests + 26 integration tests covering: species config (human/mouse/rat), feature classification, I/O adapters (h5ad/TSV/CSV/TXT), reference building (HGNC/MGI/RGD), all 5 harmonization tiers, case-insensitive matching, Excel corruption detection, withdrawn gene handling, conservative merge, markdown reporting, empty input handling, and end-to-end integration on the 10x pbmc3k dataset.
 
 ---
 
@@ -403,7 +410,9 @@ python -m pytest tests/test_references.py -v
 stangene/
 ├── pyproject.toml
 ├── README.md
+├── LICENSE                      # MIT
 ├── skill.md                     # Claude Code skill definition
+├── .readthedocs.yaml            # Read the Docs config
 ├── src/stangene/
 │   ├── __init__.py              # public API: run(), re-exports
 │   ├── __main__.py              # CLI: harmonize, build-refs
@@ -413,7 +422,7 @@ stangene/
 │   ├── references.py            # build_reference(), load_reference()
 │   ├── harmonize.py             # harmonize(), HarmonizationResult
 │   ├── merge.py                 # merge_features(), MergeResult
-│   ├── report.py                # summary(), conflict_report(), write_reports()
+│   ├── report.py                # summary(), conflict_report(), generate_markdown_report(), write_reports()
 │   └── _logging.py              # structured logging
 ├── references/                  # built by build_reference(), gitignored
 ├── tests/
@@ -425,8 +434,18 @@ stangene/
 │   ├── test_harmonize.py
 │   ├── test_merge.py
 │   ├── test_report.py
-│   └── test_run.py
-└── docs/superpowers/
-    ├── specs/                   # design spec
-    └── plans/                   # implementation plan
+│   ├── test_markdown_report.py
+│   ├── test_edge_cases.py
+│   ├── test_run.py
+│   └── test_pbmc3k.py           # integration test on real 10x data
+├── docs/                        # Sphinx docs (GitHub Pages)
+│   ├── conf.py
+│   ├── index.md
+│   ├── quickstart.md
+│   ├── how-it-works.md
+│   ├── api/                     # auto-generated API reference
+│   └── _static/logo.{svg,png}
+└── .github/workflows/
+    ├── tests.yml                # CI: pytest on Python 3.10/3.11/3.12
+    └── docs.yml                 # deploy docs to GitHub Pages
 ```
