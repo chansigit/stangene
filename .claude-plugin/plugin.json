@@ -1,0 +1,19 @@
+{
+  "name": "stangene",
+  "displayName": "stangene",
+  "description": "Gene identifier harmonization for single-cell transcriptomics",
+  "version": "1.0.0",
+  "author": {
+    "name": "chansigit"
+  },
+  "homepage": "https://github.com/chansigit/stangene",
+  "repository": "https://github.com/chansigit/stangene",
+  "license": "MIT",
+  "keywords": [
+    "single-cell",
+    "scRNA-seq",
+    "gene-names",
+    "harmonization",
+    "bioinformatics"
+  ]
+}

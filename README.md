@@ -87,14 +87,26 @@ flowchart TD
 
 ## Install
 
-```bash
-pip install -e .
+### Python package
 
-# With development dependencies (pytest, scanpy):
+```bash
+pip install git+https://github.com/chansigit/stangene.git
+
+# Or from source with dev dependencies:
+git clone https://github.com/chansigit/stangene.git
+cd stangene
 pip install -e ".[dev]"
 ```
 
 **Dependencies:** pandas, anndata, pyarrow. Downloads use stdlib `urllib` (no `requests`).
+
+### Claude Code plugin
+
+```
+/plugins add chansigit/stangene
+```
+
+Once installed, ask Claude to "harmonize genes" or "standardize gene names" and the skill activates automatically.
 
 ---
 
