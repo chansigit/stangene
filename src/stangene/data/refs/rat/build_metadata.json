@@ -1,0 +1,13 @@
+{
+  "species": "rat",
+  "download_timestamp": "2026-04-24T02:31:45.051218+00:00",
+  "sources": {
+    "rgd_genes": {
+      "url": "https://download.rgd.mcw.edu/data_release/RAT/GENES_RAT.txt",
+      "sha256": "2de747b2571d6d6419e92e632dd8e762f6ff58f98f7a654ebff58a017f154eb9",
+      "rows": 61462
+    }
+  },
+  "gene_count": 61462,
+  "lookup_count": 116152
+}

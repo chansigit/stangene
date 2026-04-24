@@ -1,13 +1,11 @@
-references/
 *.egg-info/
 __pycache__/
 *.pyc
 dist/
 build/
 .eggs/
-*.parquet
 docs/_build/
 .DS_Store
 ._*
-data/
-output/
+/data/
+/output/

@@ -1,0 +1,20 @@
+{
+  "species": "rhesus",
+  "download_timestamp": "2026-04-24T02:34:41.562681+00:00",
+  "sources": {
+    "ensembl_biomart": {
+      "url": "https://www.ensembl.org/biomart/martservice?query=%3C%3Fxml%20version%3D%221.0%22%20encoding%3D%22UTF-8%22%3F%3E%3C%21DOCTYPE%20Query%3E%3CQuery%20virtualSchemaName%3D%22default%22%20formatter%3D%22TSV%22%20header%3D%221%22%3E%3CDataset%20name%3D%22mmulatta_gene_ensembl%22%20interface%3D%22default%22%3E%3CAttribute%20name%3D%22ensembl_gene_id%22/%3E%3CAttribute%20name%3D%22external_gene_name%22/%3E%3CAttribute%20name%3D%22external_synonym%22/%3E%3CAttribute%20name%3D%22gene_biotype%22/%3E%3C/Dataset%3E%3C/Query%3E",
+      "dataset": "mmulatta_gene_ensembl",
+      "attributes": [
+        "ensembl_gene_id",
+        "external_gene_name",
+        "external_synonym",
+        "gene_biotype"
+      ],
+      "sha256": "bca56e672f7d9355239826d4094d1f872138f3c5ecb010c4b4b10c72a09c90b2",
+      "rows": 35542
+    }
+  },
+  "gene_count": 35432,
+  "lookup_count": 25091
+}

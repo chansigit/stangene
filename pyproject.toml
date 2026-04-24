@@ -30,3 +30,6 @@ stangene = "stangene.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+stangene = ["data/refs/*/*.parquet", "data/refs/*/*.json"]

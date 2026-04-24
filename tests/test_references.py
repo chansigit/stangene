@@ -44,7 +44,6 @@ def test_build_human_creates_files(ref_dir, mock_hgnc_data):
 
     human_dir = os.path.join(ref_dir, "human")
     assert os.path.exists(os.path.join(human_dir, "gene_table.parquet"))
-    assert os.path.exists(os.path.join(human_dir, "symbol_lookup.parquet"))
     assert os.path.exists(os.path.join(human_dir, "build_metadata.json"))
 
 
@@ -149,7 +148,6 @@ def test_build_mouse_creates_files(ref_dir, mock_mgi_markers_data, mock_mgi_ense
 
     mouse_dir = os.path.join(ref_dir, "mouse")
     assert os.path.exists(os.path.join(mouse_dir, "gene_table.parquet"))
-    assert os.path.exists(os.path.join(mouse_dir, "symbol_lookup.parquet"))
 
 
 def test_build_mouse_gene_table(ref_dir, mock_mgi_markers_data, mock_mgi_ensembl_data):
@@ -223,7 +221,6 @@ def test_build_rat_creates_files(ref_dir, mock_rgd_data):
 
     rat_dir = os.path.join(ref_dir, "rat")
     assert os.path.exists(os.path.join(rat_dir, "gene_table.parquet"))
-    assert os.path.exists(os.path.join(rat_dir, "symbol_lookup.parquet"))
     assert os.path.exists(os.path.join(rat_dir, "build_metadata.json"))
 
 
@@ -339,7 +336,6 @@ def test_build_zebrafish_creates_files(ref_dir, mock_zfin_genes_data, mock_zfin_
 
     zf_dir = os.path.join(ref_dir, "zebrafish")
     assert os.path.exists(os.path.join(zf_dir, "gene_table.parquet"))
-    assert os.path.exists(os.path.join(zf_dir, "symbol_lookup.parquet"))
     assert os.path.exists(os.path.join(zf_dir, "build_metadata.json"))
 
 
@@ -479,7 +475,6 @@ def test_build_fruitfly_creates_files(ref_dir, mock_flybase_gene_map_data, mock_
 
     fly_dir = os.path.join(ref_dir, "fruit_fly")
     assert os.path.exists(os.path.join(fly_dir, "gene_table.parquet"))
-    assert os.path.exists(os.path.join(fly_dir, "symbol_lookup.parquet"))
 
 
 def test_build_fruitfly_gene_table(ref_dir, mock_flybase_gene_map_data, mock_flybase_synonyms_data):
@@ -577,7 +572,6 @@ def test_build_celegans_creates_files(ref_dir, mock_wormbase_gene_ids_data, mock
 
     ce_dir = os.path.join(ref_dir, "c_elegans")
     assert os.path.exists(os.path.join(ce_dir, "gene_table.parquet"))
-    assert os.path.exists(os.path.join(ce_dir, "symbol_lookup.parquet"))
 
 
 def test_build_celegans_gene_table(ref_dir, mock_wormbase_gene_ids_data, mock_wormbase_other_ids_data):
@@ -663,7 +657,6 @@ def test_build_cynomolgus_creates_files(ref_dir, mock_biomart_cynomolgus_data):
 
     cyno_dir = os.path.join(ref_dir, "cynomolgus")
     assert os.path.exists(os.path.join(cyno_dir, "gene_table.parquet"))
-    assert os.path.exists(os.path.join(cyno_dir, "symbol_lookup.parquet"))
 
 
 def test_build_cynomolgus_gene_table(ref_dir, mock_biomart_cynomolgus_data):

@@ -1,0 +1,14 @@
+{
+  "species": "marmoset",
+  "download_timestamp": "2026-04-24T02:32:31.175100+00:00",
+  "sources": {
+    "ensembl_biomart": {
+      "url": "https://www.ensembl.org/biomart/martservice?query=%3C%3Fxml%20version%3D%221.0%22%20encoding%3D%22UTF-8%22%3F%3E%3C%21DOCTYPE%20Query%3E%3CQuery%20virtualSchemaName%3D%22default%22%20formatter%3D%22TSV%22%20header%3D%221%22%3E%3CDataset%20name%3D%22cjacchus_gene_ensembl%22%20interface%3D%22default%22%3E%3CAttribute%20name%3D%22ensembl_gene_id%22/%3E%3CAttribute%20name%3D%22external_gene_name%22/%3E%3CAttribute%20name%3D%22external_synonym%22/%3E%3CAttribute%20name%3D%22gene_biotype%22/%3E%3C/Dataset%3E%3C/Query%3E",
+      "dataset": "cjacchus_gene_ensembl",
+      "sha256": "7fa6491794f2780a194494057ba7bdae75342307e74d5212c283e2883c1ac2ae",
+      "rows": 40206
+    }
+  },
+  "gene_count": 40188,
+  "lookup_count": 26518
+}

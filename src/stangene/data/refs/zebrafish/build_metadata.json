@@ -1,0 +1,23 @@
+{
+  "species": "zebrafish",
+  "download_timestamp": "2026-04-24T02:31:54.862145+00:00",
+  "sources": {
+    "zfin_genes": {
+      "url": "https://zfin.org/downloads/gene.txt",
+      "sha256": "7f1c258a44569eb40c1409eba36dd9a860154de8284c7a2294b54ec0aec9a577",
+      "rows": 25500
+    },
+    "zfin_aliases": {
+      "url": "https://zfin.org/downloads/aliases.txt",
+      "sha256": "2e61ee7198d29b1e828245d8d2ea56e4aa965198f7855d5fdc87e7effea72d5a",
+      "rows": 197364
+    },
+    "zfin_ensembl": {
+      "url": "https://zfin.org/downloads/ensembl_1_to_1.txt",
+      "sha256": "23b1b8eb2ea0e7f167e9970537f9ad701aa137b869f2b427e949e6984bc78fb9",
+      "rows": 27014
+    }
+  },
+  "gene_count": 25500,
+  "lookup_count": 25500
+}

@@ -1,0 +1,20 @@
+{
+  "species": "mouse_lemur",
+  "download_timestamp": "2026-04-24T02:34:49.304373+00:00",
+  "sources": {
+    "ensembl_biomart": {
+      "url": "https://www.ensembl.org/biomart/martservice?query=%3C%3Fxml%20version%3D%221.0%22%20encoding%3D%22UTF-8%22%3F%3E%3C%21DOCTYPE%20Query%3E%3CQuery%20virtualSchemaName%3D%22default%22%20formatter%3D%22TSV%22%20header%3D%221%22%3E%3CDataset%20name%3D%22mmurinus_gene_ensembl%22%20interface%3D%22default%22%3E%3CAttribute%20name%3D%22ensembl_gene_id%22/%3E%3CAttribute%20name%3D%22external_gene_name%22/%3E%3CAttribute%20name%3D%22external_synonym%22/%3E%3CAttribute%20name%3D%22gene_biotype%22/%3E%3C/Dataset%3E%3C/Query%3E",
+      "dataset": "mmurinus_gene_ensembl",
+      "attributes": [
+        "ensembl_gene_id",
+        "external_gene_name",
+        "external_synonym",
+        "gene_biotype"
+      ],
+      "sha256": "3b1a237b90b31eb44f5e5e85cb7144b9050a7c1fa1f579f716f37100aeb11c81",
+      "rows": 26800
+    }
+  },
+  "gene_count": 26798,
+  "lookup_count": 22417
+}

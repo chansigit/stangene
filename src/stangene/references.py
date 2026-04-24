@@ -25,12 +25,13 @@ class ReferenceNotFoundError(Exception):
 def _default_reference_dir() -> str:
     """Return the default reference directory.
 
-    Uses project-relative 'references/' if it exists (dev mode),
-    otherwise falls back to ~/.cache/stangene/references.
+    Prefers parquet data shipped with the installed package
+    (src/stangene/data/refs). Falls back to ~/.cache/stangene/references
+    if the packaged directory is missing (e.g., when rebuilding refs).
     """
-    project_dir = os.path.join(os.path.dirname(__file__), "..", "..", "references")
-    if os.path.isdir(project_dir):
-        return project_dir
+    packaged = os.path.join(os.path.dirname(__file__), "data", "refs")
+    if os.path.isdir(packaged):
+        return packaged
     cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "stangene", "references")
     os.makedirs(cache_dir, exist_ok=True)
     return cache_dir
@@ -99,7 +100,7 @@ def load_reference(
     lookup_path = os.path.join(ref_dir, "symbol_lookup.parquet")
     meta_path = os.path.join(ref_dir, "build_metadata.json")
 
-    missing = [p for p in [gene_table_path, lookup_path, meta_path] if not os.path.exists(p)]
+    missing = [p for p in [gene_table_path, meta_path] if not os.path.exists(p)]
     if missing:
         raise ReferenceNotFoundError(
             f"Reference data for '{species}' incomplete at {ref_dir}. "
@@ -108,17 +109,23 @@ def load_reference(
         )
 
     gene_table = pd.read_parquet(gene_table_path)
-    symbol_lookup = pd.read_parquet(lookup_path)
     with open(meta_path) as f:
         metadata = json.load(f)
+
+    # symbol_lookup is derived from gene_table — rebuild if not cached
+    if os.path.exists(lookup_path):
+        symbol_lookup = pd.read_parquet(lookup_path)
+    else:
+        source = gene_table["source"].iloc[0] if len(gene_table) > 0 else ""
+        symbol_lookup = _build_symbol_lookup(gene_table, source=source)
 
     logger.info("Loaded %s reference: %d genes, %d lookup entries", species, len(gene_table), len(symbol_lookup))
     return {"gene_table": gene_table, "symbol_lookup": symbol_lookup, "metadata": metadata}
 
 
 def _save_reference(ref_dir, gene_table, symbol_lookup, metadata):
+    # symbol_lookup is derived data — don't persist it; rebuild at load time
     gene_table.to_parquet(os.path.join(ref_dir, "gene_table.parquet"), index=False)
-    symbol_lookup.to_parquet(os.path.join(ref_dir, "symbol_lookup.parquet"), index=False)
     with open(os.path.join(ref_dir, "build_metadata.json"), "w") as f:
         json.dump(metadata, f, indent=2)
 
@@ -267,6 +274,14 @@ def _build_mouse_reference(config, ref_dir: str) -> None:
         })
 
     gene_table = pd.DataFrame(rows)
+
+    # Filter to actual gene records. MGI "markers" also include enhancers,
+    # promoters, CTCF binding sites, CpG islands, TSS clusters, DNA segments,
+    # QTLs, and other non-gene features. Restrict to rows whose feature type
+    # contains "gene" (protein coding gene, lncRNA gene, pseudogene, miRNA gene, etc.).
+    pre_filter_count = len(gene_table)
+    gene_table = gene_table[gene_table["gene_type"].str.contains("gene", case=False, na=False)].reset_index(drop=True)
+    logger.info("MGI filter: kept %d gene records out of %d markers", len(gene_table), pre_filter_count)
 
     # Supplementary BioMart fill (non-fatal if it fails)
     biomart_url = config.reference_sources.get("ensembl_biomart", {}).get("url", "")
@@ -725,26 +740,51 @@ def _build_ensembl_biomart_reference(config, ref_dir: str) -> None:
     Symbol lookups come from BioMart's external_gene_name + external_synonym attributes.
     No previous_symbols (BioMart doesn't track those). Status hardcoded to "approved".
     """
+    import time
     import urllib.parse
 
     src = config.reference_sources["ensembl_biomart"]
     base_url = src["url"]
     dataset = src["dataset"]
 
-    biomart_xml = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<!DOCTYPE Query>'
-        '<Query virtualSchemaName="default" formatter="TSV" header="1">'
-        f'<Dataset name="{dataset}" interface="default">'
-        '<Attribute name="ensembl_gene_id"/>'
-        '<Attribute name="external_gene_name"/>'
-        '<Attribute name="external_synonym"/>'
-        '<Attribute name="gene_biotype"/>'
-        '</Dataset></Query>'
-    )
-    full_url = base_url + urllib.parse.quote(biomart_xml)
+    def _build_url(attrs: list[str]) -> str:
+        attr_xml = "".join(f'<Attribute name="{a}"/>' for a in attrs)
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<!DOCTYPE Query>'
+            '<Query virtualSchemaName="default" formatter="TSV" header="1">'
+            f'<Dataset name="{dataset}" interface="default">'
+            f'{attr_xml}'
+            '</Dataset></Query>'
+        )
+        return base_url + urllib.parse.quote(xml)
 
-    raw_data = _download_file(full_url)
+    # Try full 4-attr query; retry on BioMart MySQL hiccups; fall back to
+    # minimal 2-attr query (no synonyms, no biotype) as a last resort.
+    full_attrs = ["ensembl_gene_id", "external_gene_name", "external_synonym", "gene_biotype"]
+    min_attrs = ["ensembl_gene_id", "external_gene_name"]
+
+    def _fetch(attrs: list[str]) -> bytes:
+        last_err = None
+        for attempt in range(3):
+            data = _download_file(_build_url(attrs))
+            head = data[:200].decode("utf-8", errors="replace")
+            if "Query ERROR" in head or "MySQL" in head:
+                last_err = head.strip()
+                logger.warning("BioMart transient error (attempt %d/3) for %s: %s", attempt + 1, dataset, last_err[:150])
+                time.sleep(5 * (attempt + 1))
+                continue
+            return data
+        raise RuntimeError(f"BioMart persistent error for '{dataset}' after 3 retries: {last_err}")
+
+    try:
+        raw_data = _fetch(full_attrs)
+        used_attrs = full_attrs
+    except RuntimeError:
+        logger.warning("BioMart 4-attr query unusable for %s; falling back to 2-attr (no synonyms/biotype)", dataset)
+        raw_data = _fetch(min_attrs)
+        used_attrs = min_attrs
+
     checksum = hashlib.sha256(raw_data).hexdigest()
 
     bm_df = pd.read_csv(io.BytesIO(raw_data), sep="\t", low_memory=False, dtype=str)
@@ -805,8 +845,9 @@ def _build_ensembl_biomart_reference(config, ref_dir: str) -> None:
         "download_timestamp": datetime.now(timezone.utc).isoformat(),
         "sources": {
             "ensembl_biomart": {
-                "url": full_url,
+                "url": _build_url(used_attrs),
                 "dataset": dataset,
+                "attributes": used_attrs,
                 "sha256": checksum,
                 "rows": len(bm_df),
             },

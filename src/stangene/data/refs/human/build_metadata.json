@@ -1,0 +1,13 @@
+{
+  "species": "human",
+  "download_timestamp": "2026-04-24T02:30:54.771355+00:00",
+  "sources": {
+    "hgnc": {
+      "url": "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt",
+      "sha256": "0f2d3f035e0e6583c055a1d9e008f275376a4b66f72af380dfc2ac730272c247",
+      "rows": 44982
+    }
+  },
+  "gene_count": 44982,
+  "lookup_count": 105528
+}
