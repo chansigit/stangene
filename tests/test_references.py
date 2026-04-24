@@ -536,3 +536,101 @@ def test_build_fruitfly_symbol_lookup(ref_dir, mock_flybase_gene_map_data, mock_
     # secondary_FBgn# from gene_map → prev_symbol (by FBgn)
     old_fbgn_prev = sl[(sl["lookup_string"] == "FBgn0000058") & (sl["lookup_type"] == "prev_symbol")]
     assert len(old_fbgn_prev) == 1
+
+
+# ---------------------------------------------------------------------------
+# C. elegans (WormBase) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_wormbase_gene_ids_data():
+    """Minimal WormBase geneIDs.txt.gz format (no header, CSV)."""
+    # Format: taxon_id, WBGene, public_name, sequence_name, status, biotype
+    return (
+        "6239,WBGene00000001,aap-1,Y110A7A.10,Live,protein_coding_gene\n"
+        "6239,WBGene00000002,aat-1,F27C8.1,Live,protein_coding_gene\n"
+        "6239,WBGene00099999,oldgene,D1234.5,Dead,protein_coding_gene\n"
+    )
+
+
+@pytest.fixture
+def mock_wormbase_other_ids_data():
+    """Minimal WormBase geneOtherIDs.txt.gz format (no header, TSV)."""
+    # Format: WBGene, public_name, sequence_name, other_names (space-separated), other_ids
+    return (
+        "WBGene00000001\taap-1\tY110A7A.10\taap1 aap_1\t\n"
+        "WBGene00000002\taat-1\tF27C8.1\taat1\t\n"
+    )
+
+
+def test_build_celegans_creates_files(ref_dir, mock_wormbase_gene_ids_data, mock_wormbase_other_ids_data):
+    import gzip as gz
+    def mock_download(url):
+        if "geneIDs" in url and "Other" not in url:
+            return gz.compress(mock_wormbase_gene_ids_data.encode("utf-8"))
+        elif "geneOtherIDs" in url:
+            return gz.compress(mock_wormbase_other_ids_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("c_elegans", reference_dir=ref_dir)
+
+    ce_dir = os.path.join(ref_dir, "c_elegans")
+    assert os.path.exists(os.path.join(ce_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(ce_dir, "symbol_lookup.parquet"))
+
+
+def test_build_celegans_gene_table(ref_dir, mock_wormbase_gene_ids_data, mock_wormbase_other_ids_data):
+    import gzip as gz
+    def mock_download(url):
+        if "geneIDs" in url and "Other" not in url:
+            return gz.compress(mock_wormbase_gene_ids_data.encode("utf-8"))
+        elif "geneOtherIDs" in url:
+            return gz.compress(mock_wormbase_other_ids_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("c_elegans", reference_dir=ref_dir)
+
+    ref = load_reference("c_elegans", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    aap1 = gt[gt["symbol"] == "aap-1"]
+    assert len(aap1) == 1
+    assert aap1.iloc[0]["ensembl_id"] == "WBGene00000001"
+    assert aap1.iloc[0]["source_id"] == "WormBase:WBGene00000001"
+    assert aap1.iloc[0]["status"] == "approved"
+    assert aap1.iloc[0]["gene_type"] == "protein_coding_gene"
+
+    # "Dead" -> withdrawn
+    old = gt[gt["symbol"] == "oldgene"]
+    assert len(old) == 1
+    assert old.iloc[0]["status"] == "withdrawn"
+
+
+def test_build_celegans_symbol_lookup(ref_dir, mock_wormbase_gene_ids_data, mock_wormbase_other_ids_data):
+    import gzip as gz
+    def mock_download(url):
+        if "geneIDs" in url and "Other" not in url:
+            return gz.compress(mock_wormbase_gene_ids_data.encode("utf-8"))
+        elif "geneOtherIDs" in url:
+            return gz.compress(mock_wormbase_other_ids_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("c_elegans", reference_dir=ref_dir)
+
+    ref = load_reference("c_elegans", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    # Approved symbol (public_name)
+    approved = sl[(sl["lookup_string"] == "aap-1") & (sl["lookup_type"] == "approved_symbol")]
+    assert len(approved) == 1
+
+    # Sequence name as alias
+    seq_alias = sl[(sl["lookup_string"] == "Y110A7A.10") & (sl["lookup_type"] == "alias_symbol")]
+    assert len(seq_alias) == 1
+
+    # Other names (from geneOtherIDs) as alias
+    aap1_alias = sl[(sl["lookup_string"] == "aap1") & (sl["lookup_type"] == "alias_symbol")]
+    assert len(aap1_alias) == 1

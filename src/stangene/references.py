@@ -69,6 +69,8 @@ def build_reference(
         _build_zebrafish_reference(config, ref_dir)
     elif config.name == "fruit_fly":
         _build_fruitfly_reference(config, ref_dir)
+    elif config.name == "c_elegans":
+        _build_celegans_reference(config, ref_dir)
     else:
         raise ValueError(f"No reference builder for species: {species}")
 
@@ -615,3 +617,91 @@ def _build_fruitfly_reference(config, ref_dir: str) -> None:
 
     _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
     logger.info("Built fruit fly reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))
+
+
+def _build_celegans_reference(config, ref_dir: str) -> None:
+    """Build C. elegans reference from WormBase geneIDs + geneOtherIDs files."""
+    ids_url = config.reference_sources["wormbase_gene_ids"]["url"]
+    other_url = config.reference_sources["wormbase_other_ids"]["url"]
+
+    ids_raw = _download_file(ids_url)
+    other_raw = _download_file(other_url)
+
+    ids_data = gzip.decompress(ids_raw)
+    other_data = gzip.decompress(other_raw)
+
+    ids_checksum = hashlib.sha256(ids_raw).hexdigest()
+    other_checksum = hashlib.sha256(other_raw).hexdigest()
+
+    # geneIDs.txt is CSV (not TSV): taxon_id, WBGene, public_name, sequence_name, status, biotype
+    ids_df = pd.read_csv(
+        io.BytesIO(ids_data), sep=",", header=None,
+        names=["taxon_id", "wbgene", "public_name", "sequence_name", "status", "biotype"],
+        low_memory=False, dtype=str,
+    )
+
+    # geneOtherIDs.txt is TSV: WBGene, public_name, sequence_name, other_names, other_ids
+    other_df = pd.read_csv(
+        io.BytesIO(other_data), sep="\t", header=None,
+        names=["wbgene", "public_name", "sequence_name", "other_names", "other_ids"],
+        low_memory=False, dtype=str,
+    )
+
+    other_by_wb = {}
+    for _, r in other_df.iterrows():
+        wb = str(r["wbgene"]).strip() if pd.notna(r["wbgene"]) else ""
+        raw = str(r["other_names"]).strip() if pd.notna(r["other_names"]) else ""
+        others = [s.strip() for s in raw.split(" ") if s.strip()] if raw else []
+        if wb:
+            other_by_wb[wb] = others
+
+    rows = []
+    for _, g in ids_df.iterrows():
+        wb = str(g["wbgene"]).strip() if pd.notna(g["wbgene"]) else ""
+        public = str(g["public_name"]).strip() if pd.notna(g["public_name"]) else ""
+        seq = str(g["sequence_name"]).strip() if pd.notna(g["sequence_name"]) else ""
+        raw_status = str(g["status"]).strip() if pd.notna(g["status"]) else ""
+        biotype = str(g["biotype"]).strip() if pd.notna(g["biotype"]) else ""
+
+        if not wb or not wb.startswith("WBGene"):
+            continue
+
+        symbol = public if public else seq
+        if not symbol:
+            continue
+
+        status = "approved" if raw_status.lower() == "live" else "withdrawn"
+
+        # Aliases: sequence_name (if differs from symbol) + other_names
+        aliases = []
+        if seq and seq != symbol:
+            aliases.append(seq)
+        aliases.extend(other_by_wb.get(wb, []))
+
+        rows.append({
+            "ensembl_id": wb,  # WBGene is the primary gene ID
+            "symbol": symbol,
+            "alias_symbols": "|".join(aliases),
+            "prev_symbols": "",
+            "gene_type": biotype,
+            "status": status,
+            "source": "WormBase",
+            "source_id": f"WormBase:{wb}",
+        })
+
+    gene_table = pd.DataFrame(rows)
+    symbol_lookup = _build_symbol_lookup(gene_table, source="WormBase")
+
+    metadata = {
+        "species": "c_elegans",
+        "download_timestamp": datetime.now(timezone.utc).isoformat(),
+        "sources": {
+            "wormbase_gene_ids": {"url": ids_url, "sha256": ids_checksum, "rows": len(ids_df)},
+            "wormbase_other_ids": {"url": other_url, "sha256": other_checksum, "rows": len(other_df)},
+        },
+        "gene_count": len(gene_table),
+        "lookup_count": len(symbol_lookup),
+    }
+
+    _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
+    logger.info("Built C. elegans reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))
