@@ -517,16 +517,21 @@ def _build_fruitfly_reference(config, ref_dir: str) -> None:
     map_checksum = hashlib.sha256(map_raw).hexdigest()
     syn_checksum = hashlib.sha256(syn_raw).hexdigest()
 
-    # FlyBase files have ## comment lines at top, then a ##-prefixed header line
+    # FlyBase files have ## comment lines at top, then a ##-prefixed header line.
+    # Anchor on column-token content to tolerate FlyBase metadata lines that
+    # also lack a trailing space (e.g., "##date\t2024-01-01").
+    _HEADER_TOKENS = ("gene_symbol", "primary_FBgn", "primary_FBid", "symbol_synonym")
+
     def _read_flybase_tsv(data: bytes) -> pd.DataFrame:
         lines = data.decode("utf-8", errors="replace").split("\n")
         header_idx = None
         for i, line in enumerate(lines):
-            if line.startswith("##") and "\t" in line and not line.startswith("## "):
+            if (line.startswith("##") and "\t" in line
+                    and any(tok in line for tok in _HEADER_TOKENS)):
                 header_idx = i
                 break
         if header_idx is None:
-            raise ValueError("FlyBase TSV header line (starting with ##) not found")
+            raise ValueError("FlyBase TSV header line with expected column tokens not found")
         header = lines[header_idx].lstrip("#").strip().split("\t")
         data_lines = [l for l in lines[header_idx + 1:] if l.strip() and not l.startswith("#")]
         df = pd.DataFrame(
@@ -535,19 +540,27 @@ def _build_fruitfly_reference(config, ref_dir: str) -> None:
         )
         return df
 
+    def _require_col(df: pd.DataFrame, needle: str, label: str) -> str:
+        match = next((c for c in df.columns if needle in c), None)
+        if match is None:
+            raise ValueError(f"FlyBase: expected column containing '{label}' not found in {list(df.columns)}")
+        return match
+
     map_df = _read_flybase_tsv(map_data)
     syn_df = _read_flybase_tsv(syn_data)
 
-    sym_col = next(c for c in map_df.columns if "gene_symbol" in c)
-    primary_col = next(c for c in map_df.columns if "primary_FBgn" in c)
+    sym_col = _require_col(map_df, "gene_symbol", "gene_symbol")
+    primary_col = _require_col(map_df, "primary_FBgn", "primary_FBgn")
     secondary_col = next((c for c in map_df.columns if "secondary_FBgn" in c), None)
 
     # Filter to Dmel only (some files include other Drosophila species)
     if "organism_abbreviation" in map_df.columns:
         map_df = map_df[map_df["organism_abbreviation"] == "Dmel"]
 
-    syn_fbgn_col = next(c for c in syn_df.columns if "primary_FBid" in c or "primary_FBgn" in c)
-    syn_symbol_col = next(c for c in syn_df.columns if "symbol_synonym" in c)
+    syn_fbgn_col = next((c for c in syn_df.columns if "primary_FBid" in c or "primary_FBgn" in c), None)
+    if syn_fbgn_col is None:
+        raise ValueError(f"FlyBase: expected 'primary_FBid' or 'primary_FBgn' column in synonyms file, got {list(syn_df.columns)}")
+    syn_symbol_col = _require_col(syn_df, "symbol_synonym", "symbol_synonym")
     if "organism_abbreviation" in syn_df.columns:
         syn_df = syn_df[syn_df["organism_abbreviation"] == "Dmel"]
 
