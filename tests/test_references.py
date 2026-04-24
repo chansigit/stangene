@@ -326,7 +326,7 @@ def mock_zfin_ensembl_data():
 
 def test_build_zebrafish_creates_files(ref_dir, mock_zfin_genes_data, mock_zfin_aliases_data, mock_zfin_ensembl_data):
     def mock_download(url):
-        if "zfin_genes" in url:
+        if "/gene.txt" in url:
             return mock_zfin_genes_data.encode("utf-8")
         elif "aliases" in url:
             return mock_zfin_aliases_data.encode("utf-8")
@@ -345,7 +345,7 @@ def test_build_zebrafish_creates_files(ref_dir, mock_zfin_genes_data, mock_zfin_
 
 def test_build_zebrafish_gene_table(ref_dir, mock_zfin_genes_data, mock_zfin_aliases_data, mock_zfin_ensembl_data):
     def mock_download(url):
-        if "zfin_genes" in url:
+        if "/gene.txt" in url:
             return mock_zfin_genes_data.encode("utf-8")
         elif "aliases" in url:
             return mock_zfin_aliases_data.encode("utf-8")
@@ -368,7 +368,7 @@ def test_build_zebrafish_gene_table(ref_dir, mock_zfin_genes_data, mock_zfin_ali
 
 def test_build_zebrafish_symbol_lookup(ref_dir, mock_zfin_genes_data, mock_zfin_aliases_data, mock_zfin_ensembl_data):
     def mock_download(url):
-        if "zfin_genes" in url:
+        if "/gene.txt" in url:
             return mock_zfin_genes_data.encode("utf-8")
         elif "aliases" in url:
             return mock_zfin_aliases_data.encode("utf-8")
@@ -412,7 +412,7 @@ def test_build_zebrafish_handles_empty_cells(ref_dir):
     )
 
     def mock_download(url):
-        if "zfin_genes" in url:
+        if "/gene.txt" in url:
             return genes_data.encode("utf-8")
         elif "aliases" in url:
             return aliases_data.encode("utf-8")

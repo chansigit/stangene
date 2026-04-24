@@ -39,7 +39,15 @@ def _default_reference_dir() -> str:
 def _download_file(url: str) -> bytes:
     """Download a file from a URL and return its contents as bytes."""
     logger.info("Downloading %s", url)
-    req = urllib.request.Request(url, headers={"User-Agent": "stangene/0.1.0"})
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (compatible; stangene/0.1.0; "
+                "+https://github.com/chansigit/stangene)"
+            )
+        },
+    )
     # BioMart queries for large datasets can take 3-5 minutes
     with urllib.request.urlopen(req, timeout=300) as resp:
         return resp.read()

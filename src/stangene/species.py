@@ -118,7 +118,7 @@ _SPECIES_CONFIGS: dict[str, SpeciesConfig] = {
         naming_convention="capitalized",
         reference_sources={
             "zfin_genes": {
-                "url": "https://zfin.org/downloads/zfin_genes.txt",
+                "url": "https://zfin.org/downloads/gene.txt",
                 "description": "ZFIN zebrafish gene list with Ensembl IDs",
             },
             "zfin_aliases": {
@@ -138,11 +138,15 @@ _SPECIES_CONFIGS: dict[str, SpeciesConfig] = {
         naming_convention="capitalized",
         reference_sources={
             "flybase_gene_map": {
-                "url": "https://ftp.flybase.net/releases/current/precomputed_files/genes/fbgn_annotation_ID.tsv.gz",
+                "url": "https://s3ftp.flybase.org/releases/current/precomputed_files/genes/fbgn_annotation_ID.tsv.gz",
                 "description": "FlyBase FBgn to annotation ID mapping with current symbols",
             },
             "flybase_synonyms": {
-                "url": "https://ftp.flybase.net/releases/current/precomputed_files/synonyms/fb_synonym_fb_current.tsv.gz",
+                # FlyBase synonyms file has no "current"-named symlink; only a
+                # versioned filename exists under /releases/current/. Users will
+                # need to bump the release suffix when FlyBase publishes a new
+                # release (e.g. fb_2026_02, fb_2026_03, ...).
+                "url": "https://s3ftp.flybase.org/releases/current/precomputed_files/synonyms/fb_synonym_fb_2026_01.tsv.gz",
                 "description": "FlyBase synonyms (aliases + secondary FBgns = previous IDs)",
             },
         },
