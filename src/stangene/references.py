@@ -40,7 +40,8 @@ def _download_file(url: str) -> bytes:
     """Download a file from a URL and return its contents as bytes."""
     logger.info("Downloading %s", url)
     req = urllib.request.Request(url, headers={"User-Agent": "stangene/0.1.0"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
+    # BioMart queries for large datasets can take 3-5 minutes
+    with urllib.request.urlopen(req, timeout=300) as resp:
         return resp.read()
 
 
@@ -71,6 +72,8 @@ def build_reference(
         _build_fruitfly_reference(config, ref_dir)
     elif config.name == "c_elegans":
         _build_celegans_reference(config, ref_dir)
+    elif config.name in ("cynomolgus", "rhesus", "marmoset", "mouse_lemur"):
+        _build_ensembl_biomart_reference(config, ref_dir)
     else:
         raise ValueError(f"No reference builder for species: {species}")
 
@@ -705,3 +708,102 @@ def _build_celegans_reference(config, ref_dir: str) -> None:
 
     _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
     logger.info("Built C. elegans reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))
+
+
+def _build_ensembl_biomart_reference(config, ref_dir: str) -> None:
+    """Build reference from Ensembl BioMart (Tier 2 species with no dedicated authority).
+
+    Used for cynomolgus macaque, rhesus macaque, common marmoset, and mouse lemur.
+    Symbol lookups come from BioMart's external_gene_name + external_synonym attributes.
+    No previous_symbols (BioMart doesn't track those). Status hardcoded to "approved".
+    """
+    import urllib.parse
+
+    src = config.reference_sources["ensembl_biomart"]
+    base_url = src["url"]
+    dataset = src["dataset"]
+
+    biomart_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<!DOCTYPE Query>'
+        '<Query virtualSchemaName="default" formatter="TSV" header="1">'
+        f'<Dataset name="{dataset}" interface="default">'
+        '<Attribute name="ensembl_gene_id"/>'
+        '<Attribute name="external_gene_name"/>'
+        '<Attribute name="external_synonym"/>'
+        '<Attribute name="gene_biotype"/>'
+        '</Dataset></Query>'
+    )
+    full_url = base_url + urllib.parse.quote(biomart_xml)
+
+    raw_data = _download_file(full_url)
+    checksum = hashlib.sha256(raw_data).hexdigest()
+
+    bm_df = pd.read_csv(io.BytesIO(raw_data), sep="\t", low_memory=False, dtype=str)
+    bm_df.columns = bm_df.columns.str.strip()
+
+    if len(bm_df) == 0:
+        raise RuntimeError(
+            f"Ensembl BioMart returned empty result for dataset '{dataset}'. "
+            "Check network connectivity and dataset name."
+        )
+
+    # BioMart may return different column names depending on Ensembl version
+    eid_col = next(c for c in bm_df.columns if "gene stable id" in c.lower() or c.lower() == "ensembl_gene_id")
+    sym_col = next(c for c in bm_df.columns if "gene name" in c.lower() or c.lower() == "external_gene_name")
+    syn_col = next((c for c in bm_df.columns if "synonym" in c.lower()), None)
+    type_col = next((c for c in bm_df.columns if "gene type" in c.lower() or c.lower() == "gene_biotype"), None)
+
+    # Group by ensembl_gene_id (BioMart returns one row per synonym)
+    by_eid = {}
+    for _, r in bm_df.iterrows():
+        eid = str(r[eid_col]).strip() if pd.notna(r[eid_col]) else ""
+        if not eid:
+            continue
+        sym = str(r[sym_col]).strip() if pd.notna(r[sym_col]) else ""
+        syn = str(r[syn_col]).strip() if syn_col and pd.notna(r[syn_col]) else ""
+        gtype = str(r[type_col]).strip() if type_col and pd.notna(r[type_col]) else ""
+
+        if eid not in by_eid:
+            by_eid[eid] = {"symbol": sym, "synonyms": set(), "gene_type": gtype}
+        if syn:
+            by_eid[eid]["synonyms"].add(syn)
+        # Prefer non-empty symbol if first row happened to have an empty one
+        if sym and not by_eid[eid]["symbol"]:
+            by_eid[eid]["symbol"] = sym
+
+    rows = []
+    for eid, info in by_eid.items():
+        # A synonym that matches the symbol is not a synonym
+        synonyms = sorted(info["synonyms"] - {info["symbol"]})
+        rows.append({
+            "ensembl_id": eid,
+            "symbol": info["symbol"],
+            "alias_symbols": "|".join(synonyms),
+            "prev_symbols": "",
+            "gene_type": info["gene_type"],
+            "status": "approved",
+            "source": "Ensembl",
+            "source_id": f"Ensembl:{eid}",
+        })
+
+    gene_table = pd.DataFrame(rows)
+    symbol_lookup = _build_symbol_lookup(gene_table, source="Ensembl")
+
+    metadata = {
+        "species": config.name,
+        "download_timestamp": datetime.now(timezone.utc).isoformat(),
+        "sources": {
+            "ensembl_biomart": {
+                "url": full_url,
+                "dataset": dataset,
+                "sha256": checksum,
+                "rows": len(bm_df),
+            },
+        },
+        "gene_count": len(gene_table),
+        "lookup_count": len(symbol_lookup),
+    }
+
+    _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
+    logger.info("Built %s reference from BioMart: %d genes, %d lookup entries", config.name, len(gene_table), len(symbol_lookup))

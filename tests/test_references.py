@@ -634,3 +634,114 @@ def test_build_celegans_symbol_lookup(ref_dir, mock_wormbase_gene_ids_data, mock
     # Other names (from geneOtherIDs) as alias
     aap1_alias = sl[(sl["lookup_string"] == "aap1") & (sl["lookup_type"] == "alias_symbol")]
     assert len(aap1_alias) == 1
+
+
+# ---------------------------------------------------------------------------
+# Ensembl BioMart (Tier 2: cynomolgus, rhesus, marmoset, mouse_lemur) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_biomart_cynomolgus_data():
+    """Minimal Ensembl BioMart TSV response (header present, '' for missing).
+
+    BioMart returns multiple rows per gene if it has multiple synonyms.
+    Columns: Gene stable ID, Gene name, Gene Synonym, Gene type
+    """
+    return (
+        "Gene stable ID\tGene name\tGene Synonym\tGene type\n"
+        "ENSMFAG00000001234\tTP53\tLFS1\tprotein_coding\n"
+        "ENSMFAG00000001234\tTP53\tp53\tprotein_coding\n"
+        "ENSMFAG00000005678\tBRCA1\t\tprotein_coding\n"
+        "ENSMFAG00000009999\t\t\tprotein_coding\n"
+    )
+
+
+def test_build_cynomolgus_creates_files(ref_dir, mock_biomart_cynomolgus_data):
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_biomart_cynomolgus_data.encode("utf-8")
+        build_reference("cynomolgus", reference_dir=ref_dir)
+
+    cyno_dir = os.path.join(ref_dir, "cynomolgus")
+    assert os.path.exists(os.path.join(cyno_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(cyno_dir, "symbol_lookup.parquet"))
+
+
+def test_build_cynomolgus_gene_table(ref_dir, mock_biomart_cynomolgus_data):
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_biomart_cynomolgus_data.encode("utf-8")
+        build_reference("cynomolgus", reference_dir=ref_dir)
+
+    ref = load_reference("cynomolgus", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    tp53 = gt[gt["symbol"] == "TP53"]
+    assert len(tp53) == 1
+    assert tp53.iloc[0]["ensembl_id"] == "ENSMFAG00000001234"
+    assert tp53.iloc[0]["source_id"] == "Ensembl:ENSMFAG00000001234"
+    assert tp53.iloc[0]["source"] == "Ensembl"
+    # Multiple rows for same gene should collapse; synonyms pipe-joined in alias_symbols
+    assert "LFS1" in tp53.iloc[0]["alias_symbols"]
+    assert "p53" in tp53.iloc[0]["alias_symbols"]
+
+    # Gene with no symbol should still appear (symbol empty)
+    no_sym = gt[gt["ensembl_id"] == "ENSMFAG00000009999"]
+    assert len(no_sym) == 1
+    assert no_sym.iloc[0]["symbol"] == ""
+
+
+def test_build_cynomolgus_symbol_lookup_skips_empty(ref_dir, mock_biomart_cynomolgus_data):
+    """Genes with no symbol should NOT appear in symbol_lookup as approved_symbol."""
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_biomart_cynomolgus_data.encode("utf-8")
+        build_reference("cynomolgus", reference_dir=ref_dir)
+
+    ref = load_reference("cynomolgus", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    for _, row in sl.iterrows():
+        assert row["lookup_string"] != "ENSMFAG00000009999"
+
+
+def test_build_rhesus_creates_files(ref_dir, mock_biomart_cynomolgus_data):
+    """Smoke test: rhesus also uses the BioMart builder."""
+    data = mock_biomart_cynomolgus_data.replace("ENSMFAG", "ENSMMUG")
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = data.encode("utf-8")
+        build_reference("rhesus", reference_dir=ref_dir)
+
+    rhesus_dir = os.path.join(ref_dir, "rhesus")
+    assert os.path.exists(os.path.join(rhesus_dir, "gene_table.parquet"))
+
+
+def test_build_marmoset_creates_files(ref_dir, mock_biomart_cynomolgus_data):
+    data = mock_biomart_cynomolgus_data.replace("ENSMFAG", "ENSCJAG")
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = data.encode("utf-8")
+        build_reference("marmoset", reference_dir=ref_dir)
+
+    marm_dir = os.path.join(ref_dir, "marmoset")
+    assert os.path.exists(os.path.join(marm_dir, "gene_table.parquet"))
+
+
+def test_build_mouse_lemur_creates_files(ref_dir, mock_biomart_cynomolgus_data):
+    data = mock_biomart_cynomolgus_data.replace("ENSMFAG", "ENSMICG")
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = data.encode("utf-8")
+        build_reference("mouse_lemur", reference_dir=ref_dir)
+
+    lemur_dir = os.path.join(ref_dir, "mouse_lemur")
+    assert os.path.exists(os.path.join(lemur_dir, "gene_table.parquet"))
+
+
+def test_biomart_uses_dataset_from_config(ref_dir, mock_biomart_cynomolgus_data):
+    """Verify the BioMart URL includes the species-specific dataset name."""
+    captured_urls = []
+
+    def mock_download(url):
+        captured_urls.append(url)
+        return mock_biomart_cynomolgus_data.encode("utf-8")
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("marmoset", reference_dir=ref_dir)
+
+    assert any("cjacchus_gene_ensembl" in u for u in captured_urls)
