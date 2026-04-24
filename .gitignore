@@ -8,5 +8,6 @@ build/
 *.parquet
 docs/_build/
 .DS_Store
+._*
 data/
 output/
