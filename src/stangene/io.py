@@ -44,9 +44,17 @@ def _infer_reference_source(feature_ids: pd.Series) -> str:
     if feature_ids is None or feature_ids.isna().all():
         return ""
     sample = feature_ids.dropna().head(100)
+    if len(sample) == 0:
+        return ""
     ensembl_count = sample.str.match(r"^ENS[A-Z]*G\d+").sum()
     if ensembl_count > len(sample) * 0.5:
         return "Ensembl/GENCODE"
+    flybase_count = sample.str.match(r"^FBgn\d+").sum()
+    if flybase_count > len(sample) * 0.5:
+        return "FlyBase"
+    wormbase_count = sample.str.match(r"^WBGene\d+").sum()
+    if wormbase_count > len(sample) * 0.5:
+        return "WormBase"
     return ""
 
 
