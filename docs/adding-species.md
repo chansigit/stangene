@@ -77,3 +77,34 @@ elif config.name == "rat":
 ## Testing
 
 Add test fixtures with mock data for your species in `tests/test_references.py`, following the pattern of the existing human (HGNC) and mouse (MGI) tests.
+
+## Tier 2: Ensembl BioMart (no dedicated authority)
+
+For species without a curated nomenclature authority (e.g., most non-human primates), use the shared `_build_ensembl_biomart_reference()` instead of writing a custom parser.
+
+```python
+"my_species": SpeciesConfig(
+    name="my_species",
+    ensembl_prefix="ENS...G",
+    transcript_prefix="ENS...T",
+    naming_convention="uppercase",
+    reference_sources={
+        "ensembl_biomart": {
+            "url": "https://www.ensembl.org/biomart/martservice?query=",
+            "dataset": "<species>_gene_ensembl",
+            "description": "Ensembl BioMart gene table for <species>",
+        },
+    },
+),
+```
+
+Then in `build_reference()`, add your species to the tuple:
+
+```python
+elif config.name in ("cynomolgus", "rhesus", "marmoset", "mouse_lemur", "my_species"):
+    _build_ensembl_biomart_reference(config, ref_dir)
+```
+
+BioMart returns no `previous_symbols` and no `status` — the builder hardcodes `status="approved"` and `prev_symbols=""`. Genes with no symbol are still included in the gene_table (so Tier 1 exact_id matching works for raw Ensembl IDs), but skipped from `symbol_lookup`.
+
+See `_build_ensembl_biomart_reference` in `src/stangene/references.py` for the full implementation.

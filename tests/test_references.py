@@ -287,3 +287,461 @@ def test_build_rat_metadata(ref_dir, mock_rgd_data):
         meta = json.load(f)
     assert meta["species"] == "rat"
     assert "rgd_genes" in meta["sources"]
+
+
+# ---------------------------------------------------------------------------
+# Zebrafish (ZFIN) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_zfin_genes_data():
+    """Minimal ZFIN gene list (TSV, no header)."""
+    # Format: ZFIN_ID, SO_ID, Symbol, EnsemblID(optional — some rows may lack it)
+    return (
+        "ZDB-GENE-990415-8\tSO:0001217\ttp53\tENSDARG00000035559\n"
+        "ZDB-GENE-990415-72\tSO:0001217\tshha\tENSDARG00000068567\n"
+        "ZDB-GENE-000000-1\tSO:0001217\tnoensgene\t\n"
+    )
+
+
+@pytest.fixture
+def mock_zfin_aliases_data():
+    """ZFIN aliases file (TSV, no header)."""
+    # Format: ZFIN_ID, current_symbol, alias_symbol, alias_type
+    return (
+        "ZDB-GENE-990415-8\ttp53\tp53\tPREVIOUS NAME\n"
+        "ZDB-GENE-990415-8\ttp53\tzp53\tPREVIOUS NAME\n"
+        "ZDB-GENE-990415-72\tshha\tsonic hedgehog a\tALIAS\n"
+    )
+
+
+@pytest.fixture
+def mock_zfin_ensembl_data():
+    """ZFIN to Ensembl 1-to-1 mapping (TSV, no header)."""
+    return (
+        "ZDB-GENE-990415-8\ttp53\tENSDARG00000035559\n"
+        "ZDB-GENE-990415-72\tshha\tENSDARG00000068567\n"
+    )
+
+
+def test_build_zebrafish_creates_files(ref_dir, mock_zfin_genes_data, mock_zfin_aliases_data, mock_zfin_ensembl_data):
+    def mock_download(url):
+        if "zfin_genes" in url:
+            return mock_zfin_genes_data.encode("utf-8")
+        elif "aliases" in url:
+            return mock_zfin_aliases_data.encode("utf-8")
+        elif "ensembl" in url:
+            return mock_zfin_ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("zebrafish", reference_dir=ref_dir)
+
+    zf_dir = os.path.join(ref_dir, "zebrafish")
+    assert os.path.exists(os.path.join(zf_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(zf_dir, "symbol_lookup.parquet"))
+    assert os.path.exists(os.path.join(zf_dir, "build_metadata.json"))
+
+
+def test_build_zebrafish_gene_table(ref_dir, mock_zfin_genes_data, mock_zfin_aliases_data, mock_zfin_ensembl_data):
+    def mock_download(url):
+        if "zfin_genes" in url:
+            return mock_zfin_genes_data.encode("utf-8")
+        elif "aliases" in url:
+            return mock_zfin_aliases_data.encode("utf-8")
+        elif "ensembl" in url:
+            return mock_zfin_ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("zebrafish", reference_dir=ref_dir)
+
+    ref = load_reference("zebrafish", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    tp53 = gt[gt["symbol"] == "tp53"]
+    assert len(tp53) == 1
+    assert tp53.iloc[0]["ensembl_id"] == "ENSDARG00000035559"
+    assert tp53.iloc[0]["source_id"] == "ZFIN:ZDB-GENE-990415-8"
+    assert tp53.iloc[0]["source"] == "ZFIN"
+
+
+def test_build_zebrafish_symbol_lookup(ref_dir, mock_zfin_genes_data, mock_zfin_aliases_data, mock_zfin_ensembl_data):
+    def mock_download(url):
+        if "zfin_genes" in url:
+            return mock_zfin_genes_data.encode("utf-8")
+        elif "aliases" in url:
+            return mock_zfin_aliases_data.encode("utf-8")
+        elif "ensembl" in url:
+            return mock_zfin_ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("zebrafish", reference_dir=ref_dir)
+
+    ref = load_reference("zebrafish", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    # Approved symbol
+    tp53_approved = sl[(sl["lookup_string"] == "tp53") & (sl["lookup_type"] == "approved_symbol")]
+    assert len(tp53_approved) == 1
+
+    # "PREVIOUS NAME" alias_type → prev_symbol
+    p53_prev = sl[(sl["lookup_string"] == "p53") & (sl["lookup_type"] == "prev_symbol")]
+    assert len(p53_prev) == 1
+    assert p53_prev.iloc[0]["ensembl_id"] == "ENSDARG00000035559"
+
+    # "ALIAS" alias_type → alias_symbol
+    shha_alias = sl[(sl["lookup_string"] == "sonic hedgehog a") & (sl["lookup_type"] == "alias_symbol")]
+    assert len(shha_alias) == 1
+
+
+def test_build_zebrafish_handles_empty_cells(ref_dir):
+    """Real ZFIN data has empty cells; must not insert 'nan' literals into lookup."""
+    genes_data = (
+        "ZDB-GENE-1\tSO:0001217\tnormalgene\tENSDARG00000000001\n"
+        "\tSO:0001217\torphaned\tENSDARG00000000002\n"  # empty zfin_id
+    )
+    aliases_data = (
+        "ZDB-GENE-1\tnormalgene\t\tPREVIOUS NAME\n"  # empty alias_string
+        "ZDB-GENE-1\tnormalgene\tsomealias\t\n"  # empty alias_type
+    )
+    ensembl_data = (
+        "ZDB-GENE-1\tnormalgene\tENSDARG00000000001\n"
+        "ZDB-GENE-X\torphan\t\n"  # empty ensembl_id in map
+    )
+
+    def mock_download(url):
+        if "zfin_genes" in url:
+            return genes_data.encode("utf-8")
+        elif "aliases" in url:
+            return aliases_data.encode("utf-8")
+        elif "ensembl" in url:
+            return ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("zebrafish", reference_dir=ref_dir)
+
+    ref = load_reference("zebrafish", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+    sl = ref["symbol_lookup"]
+
+    # "nan" must never appear as a lookup string or a symbol
+    assert "nan" not in sl["lookup_string"].str.lower().tolist()
+    assert "nan" not in gt["symbol"].str.lower().tolist()
+    # Orphaned row (empty zfin_id) should be skipped
+    assert len(gt[gt["source_id"] == "ZFIN:"]) == 0
+    assert len(gt[gt["source_id"] == "ZFIN:nan"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# Fruit fly (FlyBase) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_flybase_gene_map_data():
+    """Minimal FlyBase fbgn_annotation_ID.tsv format (with ## header, tab-separated)."""
+    return (
+        "## fbgn_annotation_ID.tsv\n"
+        "## generated: 2024-01-01\n"
+        "##\n"
+        "##gene_symbol\torganism_abbreviation\tprimary_FBgn#\tsecondary_FBgn#(s)\tannotation_ID\tsecondary_annotation_ID(s)\n"
+        "w\tDmel\tFBgn0003996\tFBgn0000058,FBgn0000083\tCG2759\t\n"
+        "Nos\tDmel\tFBgn0011676\t\tCG6713\t\n"
+        "Adh\tDmel\tFBgn0000055\t\tCG3481\t\n"
+    )
+
+
+@pytest.fixture
+def mock_flybase_synonyms_data():
+    """Minimal FlyBase fb_synonym format (with ## header)."""
+    return (
+        "## fb_synonym.tsv\n"
+        "##\n"
+        "##primary_FBid\torganism_abbreviation\tcurrent_symbol\tcurrent_fullname\tfullname_synonym(s)\tsymbol_synonym(s)\n"
+        "FBgn0003996\tDmel\tw\twhite\twhite gene\tw[+],white protein,CG2759\n"
+        "FBgn0011676\tDmel\tNos\tNitric oxide synthase\t\tdNOS,NOS1\n"
+    )
+
+
+def test_build_fruitfly_creates_files(ref_dir, mock_flybase_gene_map_data, mock_flybase_synonyms_data):
+    import gzip as gz
+    def mock_download(url):
+        if "fbgn_annotation_ID" in url:
+            return gz.compress(mock_flybase_gene_map_data.encode("utf-8"))
+        elif "synonym" in url:
+            return gz.compress(mock_flybase_synonyms_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("fruit_fly", reference_dir=ref_dir)
+
+    fly_dir = os.path.join(ref_dir, "fruit_fly")
+    assert os.path.exists(os.path.join(fly_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(fly_dir, "symbol_lookup.parquet"))
+
+
+def test_build_fruitfly_gene_table(ref_dir, mock_flybase_gene_map_data, mock_flybase_synonyms_data):
+    import gzip as gz
+    def mock_download(url):
+        if "fbgn_annotation_ID" in url:
+            return gz.compress(mock_flybase_gene_map_data.encode("utf-8"))
+        elif "synonym" in url:
+            return gz.compress(mock_flybase_synonyms_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("fruit_fly", reference_dir=ref_dir)
+
+    ref = load_reference("fruit_fly", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    w = gt[gt["symbol"] == "w"]
+    assert len(w) == 1
+    # FlyBase primary gene ID goes into ensembl_id slot (our "primary gene ID" field)
+    assert w.iloc[0]["ensembl_id"] == "FBgn0003996"
+    assert w.iloc[0]["source_id"] == "FlyBase:FBgn0003996"
+    assert w.iloc[0]["source"] == "FlyBase"
+    # secondary_FBgn# are prev_symbols (old IDs for the same gene)
+    assert "FBgn0000058" in w.iloc[0]["prev_symbols"]
+    assert "FBgn0000083" in w.iloc[0]["prev_symbols"]
+
+
+def test_build_fruitfly_symbol_lookup(ref_dir, mock_flybase_gene_map_data, mock_flybase_synonyms_data):
+    import gzip as gz
+    def mock_download(url):
+        if "fbgn_annotation_ID" in url:
+            return gz.compress(mock_flybase_gene_map_data.encode("utf-8"))
+        elif "synonym" in url:
+            return gz.compress(mock_flybase_synonyms_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("fruit_fly", reference_dir=ref_dir)
+
+    ref = load_reference("fruit_fly", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    # Approved symbol
+    w_approved = sl[(sl["lookup_string"] == "w") & (sl["lookup_type"] == "approved_symbol")]
+    assert len(w_approved) == 1
+    assert w_approved.iloc[0]["ensembl_id"] == "FBgn0003996"
+
+    # symbol_synonym from synonyms file → alias_symbol
+    dnos_alias = sl[(sl["lookup_string"] == "dNOS") & (sl["lookup_type"] == "alias_symbol")]
+    assert len(dnos_alias) == 1
+    assert dnos_alias.iloc[0]["ensembl_id"] == "FBgn0011676"
+
+    # secondary_FBgn# from gene_map → prev_symbol (by FBgn)
+    old_fbgn_prev = sl[(sl["lookup_string"] == "FBgn0000058") & (sl["lookup_type"] == "prev_symbol")]
+    assert len(old_fbgn_prev) == 1
+
+
+# ---------------------------------------------------------------------------
+# C. elegans (WormBase) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_wormbase_gene_ids_data():
+    """Minimal WormBase geneIDs.txt.gz format (no header, CSV)."""
+    # Format: taxon_id, WBGene, public_name, sequence_name, status, biotype
+    return (
+        "6239,WBGene00000001,aap-1,Y110A7A.10,Live,protein_coding_gene\n"
+        "6239,WBGene00000002,aat-1,F27C8.1,Live,protein_coding_gene\n"
+        "6239,WBGene00099999,oldgene,D1234.5,Dead,protein_coding_gene\n"
+    )
+
+
+@pytest.fixture
+def mock_wormbase_other_ids_data():
+    """Minimal WormBase geneOtherIDs.txt.gz format (no header, TSV)."""
+    # Format: WBGene, public_name, sequence_name, other_names (space-separated), other_ids
+    return (
+        "WBGene00000001\taap-1\tY110A7A.10\taap1 aap_1\t\n"
+        "WBGene00000002\taat-1\tF27C8.1\taat1\t\n"
+    )
+
+
+def test_build_celegans_creates_files(ref_dir, mock_wormbase_gene_ids_data, mock_wormbase_other_ids_data):
+    import gzip as gz
+    def mock_download(url):
+        if "geneIDs" in url and "Other" not in url:
+            return gz.compress(mock_wormbase_gene_ids_data.encode("utf-8"))
+        elif "geneOtherIDs" in url:
+            return gz.compress(mock_wormbase_other_ids_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("c_elegans", reference_dir=ref_dir)
+
+    ce_dir = os.path.join(ref_dir, "c_elegans")
+    assert os.path.exists(os.path.join(ce_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(ce_dir, "symbol_lookup.parquet"))
+
+
+def test_build_celegans_gene_table(ref_dir, mock_wormbase_gene_ids_data, mock_wormbase_other_ids_data):
+    import gzip as gz
+    def mock_download(url):
+        if "geneIDs" in url and "Other" not in url:
+            return gz.compress(mock_wormbase_gene_ids_data.encode("utf-8"))
+        elif "geneOtherIDs" in url:
+            return gz.compress(mock_wormbase_other_ids_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("c_elegans", reference_dir=ref_dir)
+
+    ref = load_reference("c_elegans", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    aap1 = gt[gt["symbol"] == "aap-1"]
+    assert len(aap1) == 1
+    assert aap1.iloc[0]["ensembl_id"] == "WBGene00000001"
+    assert aap1.iloc[0]["source_id"] == "WormBase:WBGene00000001"
+    assert aap1.iloc[0]["status"] == "approved"
+    assert aap1.iloc[0]["gene_type"] == "protein_coding_gene"
+
+    # "Dead" -> withdrawn
+    old = gt[gt["symbol"] == "oldgene"]
+    assert len(old) == 1
+    assert old.iloc[0]["status"] == "withdrawn"
+
+
+def test_build_celegans_symbol_lookup(ref_dir, mock_wormbase_gene_ids_data, mock_wormbase_other_ids_data):
+    import gzip as gz
+    def mock_download(url):
+        if "geneIDs" in url and "Other" not in url:
+            return gz.compress(mock_wormbase_gene_ids_data.encode("utf-8"))
+        elif "geneOtherIDs" in url:
+            return gz.compress(mock_wormbase_other_ids_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("c_elegans", reference_dir=ref_dir)
+
+    ref = load_reference("c_elegans", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    # Approved symbol (public_name)
+    approved = sl[(sl["lookup_string"] == "aap-1") & (sl["lookup_type"] == "approved_symbol")]
+    assert len(approved) == 1
+
+    # Sequence name as alias
+    seq_alias = sl[(sl["lookup_string"] == "Y110A7A.10") & (sl["lookup_type"] == "alias_symbol")]
+    assert len(seq_alias) == 1
+
+    # Other names (from geneOtherIDs) as alias
+    aap1_alias = sl[(sl["lookup_string"] == "aap1") & (sl["lookup_type"] == "alias_symbol")]
+    assert len(aap1_alias) == 1
+
+
+# ---------------------------------------------------------------------------
+# Ensembl BioMart (Tier 2: cynomolgus, rhesus, marmoset, mouse_lemur) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_biomart_cynomolgus_data():
+    """Minimal Ensembl BioMart TSV response (header present, '' for missing).
+
+    BioMart returns multiple rows per gene if it has multiple synonyms.
+    Columns: Gene stable ID, Gene name, Gene Synonym, Gene type
+    """
+    return (
+        "Gene stable ID\tGene name\tGene Synonym\tGene type\n"
+        "ENSMFAG00000001234\tTP53\tLFS1\tprotein_coding\n"
+        "ENSMFAG00000001234\tTP53\tp53\tprotein_coding\n"
+        "ENSMFAG00000005678\tBRCA1\t\tprotein_coding\n"
+        "ENSMFAG00000009999\t\t\tprotein_coding\n"
+    )
+
+
+def test_build_cynomolgus_creates_files(ref_dir, mock_biomart_cynomolgus_data):
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_biomart_cynomolgus_data.encode("utf-8")
+        build_reference("cynomolgus", reference_dir=ref_dir)
+
+    cyno_dir = os.path.join(ref_dir, "cynomolgus")
+    assert os.path.exists(os.path.join(cyno_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(cyno_dir, "symbol_lookup.parquet"))
+
+
+def test_build_cynomolgus_gene_table(ref_dir, mock_biomart_cynomolgus_data):
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_biomart_cynomolgus_data.encode("utf-8")
+        build_reference("cynomolgus", reference_dir=ref_dir)
+
+    ref = load_reference("cynomolgus", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    tp53 = gt[gt["symbol"] == "TP53"]
+    assert len(tp53) == 1
+    assert tp53.iloc[0]["ensembl_id"] == "ENSMFAG00000001234"
+    assert tp53.iloc[0]["source_id"] == "Ensembl:ENSMFAG00000001234"
+    assert tp53.iloc[0]["source"] == "Ensembl"
+    # Multiple rows for same gene should collapse; synonyms pipe-joined in alias_symbols
+    assert "LFS1" in tp53.iloc[0]["alias_symbols"]
+    assert "p53" in tp53.iloc[0]["alias_symbols"]
+
+    # Gene with no symbol should still appear (symbol empty)
+    no_sym = gt[gt["ensembl_id"] == "ENSMFAG00000009999"]
+    assert len(no_sym) == 1
+    assert no_sym.iloc[0]["symbol"] == ""
+
+
+def test_build_cynomolgus_symbol_lookup_skips_empty(ref_dir, mock_biomart_cynomolgus_data):
+    """Genes with no symbol should NOT appear in symbol_lookup as approved_symbol."""
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = mock_biomart_cynomolgus_data.encode("utf-8")
+        build_reference("cynomolgus", reference_dir=ref_dir)
+
+    ref = load_reference("cynomolgus", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    for _, row in sl.iterrows():
+        assert row["lookup_string"] != "ENSMFAG00000009999"
+
+
+def test_build_rhesus_creates_files(ref_dir, mock_biomart_cynomolgus_data):
+    """Smoke test: rhesus also uses the BioMart builder."""
+    data = mock_biomart_cynomolgus_data.replace("ENSMFAG", "ENSMMUG")
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = data.encode("utf-8")
+        build_reference("rhesus", reference_dir=ref_dir)
+
+    rhesus_dir = os.path.join(ref_dir, "rhesus")
+    assert os.path.exists(os.path.join(rhesus_dir, "gene_table.parquet"))
+
+
+def test_build_marmoset_creates_files(ref_dir, mock_biomart_cynomolgus_data):
+    data = mock_biomart_cynomolgus_data.replace("ENSMFAG", "ENSCJAG")
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = data.encode("utf-8")
+        build_reference("marmoset", reference_dir=ref_dir)
+
+    marm_dir = os.path.join(ref_dir, "marmoset")
+    assert os.path.exists(os.path.join(marm_dir, "gene_table.parquet"))
+
+
+def test_build_mouse_lemur_creates_files(ref_dir, mock_biomart_cynomolgus_data):
+    data = mock_biomart_cynomolgus_data.replace("ENSMFAG", "ENSMICG")
+    with patch("stangene.references._download_file") as mock_dl:
+        mock_dl.return_value = data.encode("utf-8")
+        build_reference("mouse_lemur", reference_dir=ref_dir)
+
+    lemur_dir = os.path.join(ref_dir, "mouse_lemur")
+    assert os.path.exists(os.path.join(lemur_dir, "gene_table.parquet"))
+
+
+def test_biomart_uses_dataset_from_config(ref_dir, mock_biomart_cynomolgus_data):
+    """Verify the BioMart URL includes the species-specific dataset name."""
+    captured_urls = []
+
+    def mock_download(url):
+        captured_urls.append(url)
+        return mock_biomart_cynomolgus_data.encode("utf-8")
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("marmoset", reference_dir=ref_dir)
+
+    assert any("cjacchus_gene_ensembl" in u for u in captured_urls)

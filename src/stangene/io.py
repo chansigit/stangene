@@ -10,9 +10,9 @@ from stangene._logging import get_logger
 
 logger = get_logger("io")
 
-# Regex to strip Ensembl version suffix: ENSG00000141510.18 -> ENSG00000141510
-# Handles human (ENSG), mouse (ENSMUSG), rat (ENSRNOG), and other species
-_VERSION_SUFFIX = re.compile(r"^(ENS[A-Z]*G\d+)\.\d+$")
+# Regex to strip versioned gene ID suffix: ENSG00000141510.18 -> ENSG00000141510
+# Handles Ensembl (ENSG/ENSMUSG/ENSRNOG/ENSDARG/etc.), FlyBase (FBgn), and WormBase (WBGene)
+_VERSION_SUFFIX = re.compile(r"^((?:ENS[A-Z]*G|FBgn|WBGene)\d+)\.\d+$")
 
 # Common column names auto-detected for TSV/CSV files
 _AUTO_COLUMN_MAP = {
@@ -44,9 +44,17 @@ def _infer_reference_source(feature_ids: pd.Series) -> str:
     if feature_ids is None or feature_ids.isna().all():
         return ""
     sample = feature_ids.dropna().head(100)
+    if len(sample) == 0:
+        return ""
     ensembl_count = sample.str.match(r"^ENS[A-Z]*G\d+").sum()
     if ensembl_count > len(sample) * 0.5:
         return "Ensembl/GENCODE"
+    flybase_count = sample.str.match(r"^FBgn\d+").sum()
+    if flybase_count > len(sample) * 0.5:
+        return "FlyBase"
+    wormbase_count = sample.str.match(r"^WBGene\d+").sum()
+    if wormbase_count > len(sample) * 0.5:
+        return "WormBase"
     return ""
 
 

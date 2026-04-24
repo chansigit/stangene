@@ -138,3 +138,24 @@ def test_write_results_enriches_h5ad(sample_result, sample_h5ad, tmp_path):
     adata = anndata.read_h5ad(enriched_path)
     assert "gene_id_harmonized" in adata.var.columns
     assert "TP53" in adata.var_names
+
+
+def test_infer_reference_source_flybase():
+    """FBgn-majority input should be inferred as FlyBase."""
+    from stangene.io import _infer_reference_source
+    ids = pd.Series(["FBgn0000001", "FBgn0000002", "FBgn0000003"])
+    assert _infer_reference_source(ids) == "FlyBase"
+
+
+def test_infer_reference_source_wormbase():
+    """WBGene-majority input should be inferred as WormBase."""
+    from stangene.io import _infer_reference_source
+    ids = pd.Series(["WBGene00000001", "WBGene00000002", "WBGene00000003"])
+    assert _infer_reference_source(ids) == "WormBase"
+
+
+def test_infer_reference_source_mixed_defaults_to_empty():
+    """Mixed IDs with no clear majority return empty string."""
+    from stangene.io import _infer_reference_source
+    ids = pd.Series(["ENSG00000141510", "FBgn0000001", "randomstring"])
+    assert _infer_reference_source(ids) == ""

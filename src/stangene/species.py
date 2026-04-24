@@ -11,21 +11,24 @@ class SpeciesConfig:
     name: str
     ensembl_prefix: str
     transcript_prefix: str
-    naming_convention: str  # "uppercase" (human) or "capitalized" (mouse)
+    naming_convention: str  # "uppercase", "capitalized", or "lowercase"
     reference_sources: dict = field(default_factory=dict)
 
 
 # Classification patterns: list of (compiled_regex_pattern, feature_type).
 # Order matters — first match wins. These are checked against original_feature_name.
 CLASSIFICATION_PATTERNS: list[tuple[re.Pattern, str]] = [
-    # Transcript IDs (check before gene IDs since ENST is a subset prefix-wise)
-    (re.compile(r"^ENST\d+", re.IGNORECASE), "transcript"),
-    (re.compile(r"^ENSMUST\d+", re.IGNORECASE), "transcript"),
-    (re.compile(r"^ENSRNOT\d+", re.IGNORECASE), "transcript"),
+    # Ensembl transcript IDs (check before gene IDs since both start with ENS)
+    # Matches ENST, ENSMUST, ENSRNOT, ENSDART, ENSMFAT, ENSMMUT, ENSCJAT, ENSMICT, etc.
+    (re.compile(r"^ENS[A-Z]*T\d+", re.IGNORECASE), "transcript"),
     # Ensembl gene IDs
-    (re.compile(r"^ENSG\d+", re.IGNORECASE), "gene"),
-    (re.compile(r"^ENSMUSG\d+", re.IGNORECASE), "gene"),
-    (re.compile(r"^ENSRNOG\d+", re.IGNORECASE), "gene"),
+    # Matches ENSG, ENSMUSG, ENSRNOG, ENSDARG, ENSMFAG, ENSMMUG, ENSCJAG, ENSMICG, etc.
+    (re.compile(r"^ENS[A-Z]*G\d+", re.IGNORECASE), "gene"),
+    # FlyBase IDs (transcripts first)
+    (re.compile(r"^FBtr\d+", re.IGNORECASE), "transcript"),
+    (re.compile(r"^FBgn\d+", re.IGNORECASE), "gene"),
+    # WormBase IDs
+    (re.compile(r"^WBGene\d+", re.IGNORECASE), "gene"),
     # Antibody capture / protein tags
     (re.compile(r".*TotalSeq", re.IGNORECASE), "antibody_capture"),
     (re.compile(r".*_ADT$", re.IGNORECASE), "antibody_capture"),
@@ -105,6 +108,110 @@ _SPECIES_CONFIGS: dict[str, SpeciesConfig] = {
             "rgd_genes": {
                 "url": "https://download.rgd.mcw.edu/data_release/RAT/GENES_RAT.txt",
                 "description": "RGD rat gene file with approved symbols, synonyms, and Ensembl IDs",
+            },
+        },
+    ),
+    "zebrafish": SpeciesConfig(
+        name="zebrafish",
+        ensembl_prefix="ENSDARG",
+        transcript_prefix="ENSDART",
+        naming_convention="capitalized",
+        reference_sources={
+            "zfin_genes": {
+                "url": "https://zfin.org/downloads/zfin_genes.txt",
+                "description": "ZFIN zebrafish gene list with Ensembl IDs",
+            },
+            "zfin_aliases": {
+                "url": "https://zfin.org/downloads/aliases.txt",
+                "description": "ZFIN gene aliases and previous symbols",
+            },
+            "zfin_ensembl": {
+                "url": "https://zfin.org/downloads/ensembl_1_to_1.txt",
+                "description": "ZFIN to Ensembl 1:1 mapping",
+            },
+        },
+    ),
+    "fruit_fly": SpeciesConfig(
+        name="fruit_fly",
+        ensembl_prefix="FBgn",
+        transcript_prefix="FBtr",
+        naming_convention="capitalized",
+        reference_sources={
+            "flybase_gene_map": {
+                "url": "https://ftp.flybase.net/releases/current/precomputed_files/genes/fbgn_annotation_ID.tsv.gz",
+                "description": "FlyBase FBgn to annotation ID mapping with current symbols",
+            },
+            "flybase_synonyms": {
+                "url": "https://ftp.flybase.net/releases/current/precomputed_files/synonyms/fb_synonym_fb_current.tsv.gz",
+                "description": "FlyBase synonyms (aliases + secondary FBgns = previous IDs)",
+            },
+        },
+    ),
+    "c_elegans": SpeciesConfig(
+        name="c_elegans",
+        ensembl_prefix="WBGene",
+        transcript_prefix="",  # C. elegans transcripts have varied naming; no single prefix
+        naming_convention="lowercase",
+        reference_sources={
+            "wormbase_gene_ids": {
+                "url": "https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/c_elegans.PRJNA13758.current.geneIDs.txt.gz",
+                "description": "WormBase C. elegans gene IDs with public names and biotypes",
+            },
+            "wormbase_other_ids": {
+                "url": "https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/c_elegans.PRJNA13758.current.geneOtherIDs.txt.gz",
+                "description": "WormBase other IDs (aliases, previous symbols)",
+            },
+        },
+    ),
+    "cynomolgus": SpeciesConfig(
+        name="cynomolgus",
+        ensembl_prefix="ENSMFAG",
+        transcript_prefix="ENSMFAT",
+        naming_convention="uppercase",
+        reference_sources={
+            "ensembl_biomart": {
+                "url": "https://www.ensembl.org/biomart/martservice?query=",
+                "dataset": "mfascicularis_gene_ensembl",
+                "description": "Ensembl BioMart Macaca fascicularis gene table",
+            },
+        },
+    ),
+    "rhesus": SpeciesConfig(
+        name="rhesus",
+        ensembl_prefix="ENSMMUG",
+        transcript_prefix="ENSMMUT",
+        naming_convention="uppercase",
+        reference_sources={
+            "ensembl_biomart": {
+                "url": "https://www.ensembl.org/biomart/martservice?query=",
+                "dataset": "mmulatta_gene_ensembl",
+                "description": "Ensembl BioMart Macaca mulatta gene table",
+            },
+        },
+    ),
+    "marmoset": SpeciesConfig(
+        name="marmoset",
+        ensembl_prefix="ENSCJAG",
+        transcript_prefix="ENSCJAT",
+        naming_convention="uppercase",
+        reference_sources={
+            "ensembl_biomart": {
+                "url": "https://www.ensembl.org/biomart/martservice?query=",
+                "dataset": "cjacchus_gene_ensembl",
+                "description": "Ensembl BioMart Callithrix jacchus gene table",
+            },
+        },
+    ),
+    "mouse_lemur": SpeciesConfig(
+        name="mouse_lemur",
+        ensembl_prefix="ENSMICG",
+        transcript_prefix="ENSMICT",
+        naming_convention="uppercase",
+        reference_sources={
+            "ensembl_biomart": {
+                "url": "https://www.ensembl.org/biomart/martservice?query=",
+                "dataset": "mmurinus_gene_ensembl",
+                "description": "Ensembl BioMart Microcebus murinus gene table",
             },
         },
     ),

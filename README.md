@@ -115,18 +115,31 @@ Once installed, ask Claude to "harmonize genes" or "standardize gene names" and 
 ### 1. Build reference data (one-time per species)
 
 ```bash
-stangene build-refs --species human   # downloads HGNC (~15 MB)
-stangene build-refs --species mouse   # downloads MGI + BioMart (~10 MB)
-stangene build-refs --species rat     # downloads RGD (~5 MB)
+stangene build-refs --species human       # downloads HGNC (~15 MB)
+stangene build-refs --species mouse       # downloads MGI + BioMart (~10 MB)
+stangene build-refs --species rat         # downloads RGD (~5 MB)
+stangene build-refs --species zebrafish   # downloads ZFIN
+stangene build-refs --species fruit_fly   # downloads FlyBase
+stangene build-refs --species c_elegans   # downloads WormBase
+# Ensembl-only (BioMart) species:
+stangene build-refs --species cynomolgus
+stangene build-refs --species rhesus
+stangene build-refs --species marmoset
+stangene build-refs --species mouse_lemur
 ```
 
 Or from Python:
 
 ```python
 from stangene import build_reference
-build_reference("human")
-build_reference("mouse")
-build_reference("rat")
+
+# Dedicated nomenclature authorities
+for sp in ["human", "mouse", "rat", "zebrafish", "fruit_fly", "c_elegans"]:
+    build_reference(sp)
+
+# Ensembl BioMart (no dedicated authority)
+for sp in ["cynomolgus", "rhesus", "marmoset", "mouse_lemur"]:
+    build_reference(sp)
 ```
 
 References are stored locally (in `references/` during development, or `~/.cache/stangene/references` when pip-installed). Re-run with `--force` to update.
@@ -138,7 +151,7 @@ import stangene
 
 result = stangene.run(
     path="my_data.h5ad",       # or .tsv / .csv / .txt
-    species="human",            # or "mouse" or "rat"
+    species="human",            # or any of: mouse, rat, zebrafish, fruit_fly, c_elegans, cynomolgus, rhesus, marmoset, mouse_lemur
     output_dir="results/",      # where to write reports
     dataset_name="pbmc_10k",    # optional label
 )
@@ -303,11 +316,18 @@ Every merge is recorded in `merge_result.provenance` with the original rows and 
 
 ## Supported species
 
-| Species | Reference source | Canonical ID | Naming convention |
-|---|---|---|---|
-| Human | [HGNC](https://www.genenames.org/) (~15 MB) | Ensembl (`ENSG*`) | UPPERCASE (`TP53`) |
-| Mouse | [MGI](https://www.informatics.jax.org/) + Ensembl BioMart (~10 MB) | Ensembl (`ENSMUSG*`) | Capitalized (`Trp53`) |
-| Rat | [RGD](https://rgd.mcw.edu/) (~5 MB) | Ensembl (`ENSRNOG*`) | Capitalized (`Asip`) |
+| Species | Common name | Authority | Primary ID prefix | Source |
+|---|---|---|---|---|
+| `human` | Human (*Homo sapiens*) | [HGNC](https://www.genenames.org/) | `ENSG` | ~15 MB |
+| `mouse` | Mouse (*Mus musculus*) | [MGI](https://www.informatics.jax.org/) + Ensembl BioMart | `ENSMUSG` | ~10 MB |
+| `rat` | Rat (*Rattus norvegicus*) | [RGD](https://rgd.mcw.edu/) | `ENSRNOG` | ~5 MB |
+| `zebrafish` | Zebrafish (*Danio rerio*) | [ZFIN](https://zfin.org/) | `ENSDARG` | ZFIN genes + aliases |
+| `fruit_fly` | Fruit fly (*D. melanogaster*) | [FlyBase](https://flybase.org/) | `FBgn` | FlyBase annotation + synonyms |
+| `c_elegans` | Roundworm (*C. elegans*) | [WormBase](https://wormbase.org/) | `WBGene` | WormBase geneIDs + geneOtherIDs |
+| `cynomolgus` | Cynomolgus macaque (*M. fascicularis*) | Ensembl BioMart | `ENSMFAG` | Ensembl |
+| `rhesus` | Rhesus macaque (*M. mulatta*) | Ensembl BioMart | `ENSMMUG` | Ensembl |
+| `marmoset` | Common marmoset (*C. jacchus*) | Ensembl BioMart | `ENSCJAG` | Ensembl |
+| `mouse_lemur` | Mouse lemur (*M. murinus*) | Ensembl BioMart | `ENSMICG` | Ensembl |
 
 ### Reference internals
 
@@ -412,7 +432,7 @@ python -m pytest tests/test_pbmc3k.py -v
 python -m pytest tests/ -v
 ```
 
-103 unit tests + 26 integration tests covering: species config (human/mouse/rat), feature classification, I/O adapters (h5ad/TSV/CSV/TXT), reference building (HGNC/MGI/RGD), all 5 harmonization tiers, case-insensitive matching, Excel corruption detection, withdrawn gene handling, conservative merge, markdown reporting, empty input handling, and end-to-end integration on the 10x pbmc3k dataset.
+142 unit tests + 26 integration tests covering: species config (human/mouse/rat/zebrafish/fruit_fly/c_elegans/cynomolgus/rhesus/marmoset/mouse_lemur), feature classification, I/O adapters (h5ad/TSV/CSV/TXT), reference building (HGNC/MGI/RGD/ZFIN/FlyBase/WormBase/Ensembl BioMart), all 5 harmonization tiers (including non-Ensembl FBgn/WBGene IDs), case-insensitive matching, Excel corruption detection, withdrawn gene handling, conservative merge, markdown reporting, empty input handling, and end-to-end integration on the 10x pbmc3k dataset.
 
 ---
 
