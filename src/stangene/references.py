@@ -1,5 +1,6 @@
 """Build and load species-specific gene annotation reference databases."""
 
+import gzip
 import hashlib
 import io
 import json
@@ -66,6 +67,8 @@ def build_reference(
         _build_rat_reference(config, ref_dir)
     elif config.name == "zebrafish":
         _build_zebrafish_reference(config, ref_dir)
+    elif config.name == "fruit_fly":
+        _build_fruitfly_reference(config, ref_dir)
     else:
         raise ValueError(f"No reference builder for species: {species}")
 
@@ -497,3 +500,105 @@ def _build_zebrafish_reference(config, ref_dir: str) -> None:
 
     _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
     logger.info("Built zebrafish reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))
+
+
+def _build_fruitfly_reference(config, ref_dir: str) -> None:
+    """Build fruit fly reference from FlyBase gene annotation + synonyms files."""
+    map_url = config.reference_sources["flybase_gene_map"]["url"]
+    syn_url = config.reference_sources["flybase_synonyms"]["url"]
+
+    map_raw = _download_file(map_url)
+    syn_raw = _download_file(syn_url)
+
+    # Decompress gzip
+    map_data = gzip.decompress(map_raw)
+    syn_data = gzip.decompress(syn_raw)
+
+    map_checksum = hashlib.sha256(map_raw).hexdigest()
+    syn_checksum = hashlib.sha256(syn_raw).hexdigest()
+
+    # FlyBase files have ## comment lines at top, then a ##-prefixed header line
+    def _read_flybase_tsv(data: bytes) -> pd.DataFrame:
+        lines = data.decode("utf-8", errors="replace").split("\n")
+        header_idx = None
+        for i, line in enumerate(lines):
+            if line.startswith("##") and "\t" in line and not line.startswith("## "):
+                header_idx = i
+                break
+        if header_idx is None:
+            raise ValueError("FlyBase TSV header line (starting with ##) not found")
+        header = lines[header_idx].lstrip("#").strip().split("\t")
+        data_lines = [l for l in lines[header_idx + 1:] if l.strip() and not l.startswith("#")]
+        df = pd.DataFrame(
+            [line.split("\t") for line in data_lines],
+            columns=header,
+        )
+        return df
+
+    map_df = _read_flybase_tsv(map_data)
+    syn_df = _read_flybase_tsv(syn_data)
+
+    sym_col = next(c for c in map_df.columns if "gene_symbol" in c)
+    primary_col = next(c for c in map_df.columns if "primary_FBgn" in c)
+    secondary_col = next((c for c in map_df.columns if "secondary_FBgn" in c), None)
+
+    # Filter to Dmel only (some files include other Drosophila species)
+    if "organism_abbreviation" in map_df.columns:
+        map_df = map_df[map_df["organism_abbreviation"] == "Dmel"]
+
+    syn_fbgn_col = next(c for c in syn_df.columns if "primary_FBid" in c or "primary_FBgn" in c)
+    syn_symbol_col = next(c for c in syn_df.columns if "symbol_synonym" in c)
+    if "organism_abbreviation" in syn_df.columns:
+        syn_df = syn_df[syn_df["organism_abbreviation"] == "Dmel"]
+
+    # Build FBgn -> list of symbol synonyms
+    syn_by_fbgn = {}
+    for _, r in syn_df.iterrows():
+        fbgn = str(r[syn_fbgn_col]).strip() if pd.notna(r[syn_fbgn_col]) else ""
+        raw = str(r[syn_symbol_col]).strip() if pd.notna(r[syn_symbol_col]) else ""
+        syns = [s.strip() for s in raw.split(",") if s.strip()] if raw else []
+        if fbgn:
+            syn_by_fbgn[fbgn] = syns
+
+    rows = []
+    for _, m in map_df.iterrows():
+        symbol = str(m[sym_col]).strip() if pd.notna(m[sym_col]) else ""
+        fbgn = str(m[primary_col]).strip() if pd.notna(m[primary_col]) else ""
+        if not symbol or not fbgn.startswith("FBgn"):
+            continue
+
+        # secondary FBgn# are "previous IDs" for the same gene
+        prev_fbgns = []
+        if secondary_col and pd.notna(m[secondary_col]):
+            raw_sec = str(m[secondary_col]).strip()
+            prev_fbgns = [s.strip() for s in raw_sec.split(",") if s.strip().startswith("FBgn")]
+
+        alias_syms = syn_by_fbgn.get(fbgn, [])
+
+        rows.append({
+            "ensembl_id": fbgn,  # FlyBase FBgn is the primary gene ID
+            "symbol": symbol,
+            "alias_symbols": "|".join(alias_syms),
+            "prev_symbols": "|".join(prev_fbgns),
+            "gene_type": "",
+            "status": "approved",
+            "source": "FlyBase",
+            "source_id": f"FlyBase:{fbgn}",
+        })
+
+    gene_table = pd.DataFrame(rows)
+    symbol_lookup = _build_symbol_lookup(gene_table, source="FlyBase")
+
+    metadata = {
+        "species": "fruit_fly",
+        "download_timestamp": datetime.now(timezone.utc).isoformat(),
+        "sources": {
+            "flybase_gene_map": {"url": map_url, "sha256": map_checksum, "rows": len(map_df)},
+            "flybase_synonyms": {"url": syn_url, "sha256": syn_checksum, "rows": len(syn_df)},
+        },
+        "gene_count": len(gene_table),
+        "lookup_count": len(symbol_lookup),
+    }
+
+    _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
+    logger.info("Built fruit fly reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))

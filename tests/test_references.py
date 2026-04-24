@@ -433,3 +433,106 @@ def test_build_zebrafish_handles_empty_cells(ref_dir):
     # Orphaned row (empty zfin_id) should be skipped
     assert len(gt[gt["source_id"] == "ZFIN:"]) == 0
     assert len(gt[gt["source_id"] == "ZFIN:nan"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# Fruit fly (FlyBase) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_flybase_gene_map_data():
+    """Minimal FlyBase fbgn_annotation_ID.tsv format (with ## header, tab-separated)."""
+    return (
+        "## fbgn_annotation_ID.tsv\n"
+        "## generated: 2024-01-01\n"
+        "##\n"
+        "##gene_symbol\torganism_abbreviation\tprimary_FBgn#\tsecondary_FBgn#(s)\tannotation_ID\tsecondary_annotation_ID(s)\n"
+        "w\tDmel\tFBgn0003996\tFBgn0000058,FBgn0000083\tCG2759\t\n"
+        "Nos\tDmel\tFBgn0011676\t\tCG6713\t\n"
+        "Adh\tDmel\tFBgn0000055\t\tCG3481\t\n"
+    )
+
+
+@pytest.fixture
+def mock_flybase_synonyms_data():
+    """Minimal FlyBase fb_synonym format (with ## header)."""
+    return (
+        "## fb_synonym.tsv\n"
+        "##\n"
+        "##primary_FBid\torganism_abbreviation\tcurrent_symbol\tcurrent_fullname\tfullname_synonym(s)\tsymbol_synonym(s)\n"
+        "FBgn0003996\tDmel\tw\twhite\twhite gene\tw[+],white protein,CG2759\n"
+        "FBgn0011676\tDmel\tNos\tNitric oxide synthase\t\tdNOS,NOS1\n"
+    )
+
+
+def test_build_fruitfly_creates_files(ref_dir, mock_flybase_gene_map_data, mock_flybase_synonyms_data):
+    import gzip as gz
+    def mock_download(url):
+        if "fbgn_annotation_ID" in url:
+            return gz.compress(mock_flybase_gene_map_data.encode("utf-8"))
+        elif "synonym" in url:
+            return gz.compress(mock_flybase_synonyms_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("fruit_fly", reference_dir=ref_dir)
+
+    fly_dir = os.path.join(ref_dir, "fruit_fly")
+    assert os.path.exists(os.path.join(fly_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(fly_dir, "symbol_lookup.parquet"))
+
+
+def test_build_fruitfly_gene_table(ref_dir, mock_flybase_gene_map_data, mock_flybase_synonyms_data):
+    import gzip as gz
+    def mock_download(url):
+        if "fbgn_annotation_ID" in url:
+            return gz.compress(mock_flybase_gene_map_data.encode("utf-8"))
+        elif "synonym" in url:
+            return gz.compress(mock_flybase_synonyms_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("fruit_fly", reference_dir=ref_dir)
+
+    ref = load_reference("fruit_fly", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    w = gt[gt["symbol"] == "w"]
+    assert len(w) == 1
+    # FlyBase primary gene ID goes into ensembl_id slot (our "primary gene ID" field)
+    assert w.iloc[0]["ensembl_id"] == "FBgn0003996"
+    assert w.iloc[0]["source_id"] == "FlyBase:FBgn0003996"
+    assert w.iloc[0]["source"] == "FlyBase"
+    # secondary_FBgn# are prev_symbols (old IDs for the same gene)
+    assert "FBgn0000058" in w.iloc[0]["prev_symbols"]
+    assert "FBgn0000083" in w.iloc[0]["prev_symbols"]
+
+
+def test_build_fruitfly_symbol_lookup(ref_dir, mock_flybase_gene_map_data, mock_flybase_synonyms_data):
+    import gzip as gz
+    def mock_download(url):
+        if "fbgn_annotation_ID" in url:
+            return gz.compress(mock_flybase_gene_map_data.encode("utf-8"))
+        elif "synonym" in url:
+            return gz.compress(mock_flybase_synonyms_data.encode("utf-8"))
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("fruit_fly", reference_dir=ref_dir)
+
+    ref = load_reference("fruit_fly", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    # Approved symbol
+    w_approved = sl[(sl["lookup_string"] == "w") & (sl["lookup_type"] == "approved_symbol")]
+    assert len(w_approved) == 1
+    assert w_approved.iloc[0]["ensembl_id"] == "FBgn0003996"
+
+    # symbol_synonym from synonyms file → alias_symbol
+    dnos_alias = sl[(sl["lookup_string"] == "dNOS") & (sl["lookup_type"] == "alias_symbol")]
+    assert len(dnos_alias) == 1
+    assert dnos_alias.iloc[0]["ensembl_id"] == "FBgn0011676"
+
+    # secondary_FBgn# from gene_map → prev_symbol (by FBgn)
+    old_fbgn_prev = sl[(sl["lookup_string"] == "FBgn0000058") & (sl["lookup_type"] == "prev_symbol")]
+    assert len(old_fbgn_prev) == 1
