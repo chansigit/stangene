@@ -1,0 +1,18 @@
+{
+  "species": "c_elegans",
+  "download_timestamp": "2026-04-24T02:54:48.517177+00:00",
+  "sources": {
+    "wormbase_gene_ids": {
+      "url": "https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/annotation/c_elegans.PRJNA13758.WS298.geneIDs.txt.gz",
+      "sha256": "d87c69d1cabc03dc3e0d76b98944fecd952734f1010073b8d84c0970cda19346",
+      "rows": 52110
+    },
+    "wormbase_other_ids": {
+      "url": "https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/annotation/c_elegans.PRJNA13758.WS298.geneOtherIDs.txt.gz",
+      "sha256": "d549f0f41bc8cd301ddac1ac91f96fcdbb3815dc38ae29cce040bd758f447608",
+      "rows": 52110
+    }
+  },
+  "gene_count": 49552,
+  "lookup_count": 106688
+}

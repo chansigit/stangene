@@ -157,12 +157,14 @@ _SPECIES_CONFIGS: dict[str, SpeciesConfig] = {
         transcript_prefix="",  # C. elegans transcripts have varied naming; no single prefix
         naming_convention="lowercase",
         reference_sources={
+            # WormBase has no "current"-named symlink for these files; filenames
+            # carry the release number (e.g. WS298). Bump when a new release ships.
             "wormbase_gene_ids": {
-                "url": "https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/c_elegans.PRJNA13758.current.geneIDs.txt.gz",
+                "url": "https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/annotation/c_elegans.PRJNA13758.WS298.geneIDs.txt.gz",
                 "description": "WormBase C. elegans gene IDs with public names and biotypes",
             },
             "wormbase_other_ids": {
-                "url": "https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/c_elegans.PRJNA13758.current.geneOtherIDs.txt.gz",
+                "url": "https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/annotation/c_elegans.PRJNA13758.WS298.geneOtherIDs.txt.gz",
                 "description": "WormBase other IDs (aliases, previous symbols)",
             },
         },
