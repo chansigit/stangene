@@ -426,7 +426,10 @@ def _build_zebrafish_reference(config, ref_dir: str) -> None:
         names=["zfin_id", "symbol_em", "ensembl_id_em"],
         low_memory=False, dtype=str,
     )
-    ensembl_map = dict(zip(ensembl_df["zfin_id"], ensembl_df["ensembl_id_em"]))
+    ensembl_map = {
+        k: v for k, v in zip(ensembl_df["zfin_id"], ensembl_df["ensembl_id_em"])
+        if pd.notna(k) and pd.notna(v)
+    }
 
     # Aliases file: zfin_id, current_symbol, alias_string, alias_type
     aliases_df = pd.read_csv(
@@ -439,19 +442,20 @@ def _build_zebrafish_reference(config, ref_dir: str) -> None:
     prev_by_id = defaultdict(list)
     alias_by_id = defaultdict(list)
     for _, a in aliases_df.iterrows():
-        zid = a["zfin_id"]
-        alias_str = str(a["alias_string"]).strip()
-        atype = str(a["alias_type"]).strip().upper()
+        zid = str(a["zfin_id"]).strip() if pd.notna(a["zfin_id"]) else ""
+        alias_str = str(a["alias_string"]).strip() if pd.notna(a["alias_string"]) else ""
+        atype = str(a["alias_type"]).strip().upper() if pd.notna(a["alias_type"]) else ""
         if not zid or not alias_str:
             continue
-        if "PREVIOUS" in atype:
+        # ZFIN alias_type enum is small and stable; use exact match on known values.
+        if atype == "PREVIOUS NAME":
             prev_by_id[zid].append(alias_str)
         else:
             alias_by_id[zid].append(alias_str)
 
     rows = []
     for _, g in genes_df.iterrows():
-        zid = str(g["zfin_id"]).strip()
+        zid = str(g["zfin_id"]).strip() if pd.notna(g["zfin_id"]) else ""
         symbol = str(g["symbol"]).strip() if pd.notna(g["symbol"]) else ""
         if not symbol or not zid:
             continue

@@ -394,3 +394,42 @@ def test_build_zebrafish_symbol_lookup(ref_dir, mock_zfin_genes_data, mock_zfin_
     # "ALIAS" alias_type → alias_symbol
     shha_alias = sl[(sl["lookup_string"] == "sonic hedgehog a") & (sl["lookup_type"] == "alias_symbol")]
     assert len(shha_alias) == 1
+
+
+def test_build_zebrafish_handles_empty_cells(ref_dir):
+    """Real ZFIN data has empty cells; must not insert 'nan' literals into lookup."""
+    genes_data = (
+        "ZDB-GENE-1\tSO:0001217\tnormalgene\tENSDARG00000000001\n"
+        "\tSO:0001217\torphaned\tENSDARG00000000002\n"  # empty zfin_id
+    )
+    aliases_data = (
+        "ZDB-GENE-1\tnormalgene\t\tPREVIOUS NAME\n"  # empty alias_string
+        "ZDB-GENE-1\tnormalgene\tsomealias\t\n"  # empty alias_type
+    )
+    ensembl_data = (
+        "ZDB-GENE-1\tnormalgene\tENSDARG00000000001\n"
+        "ZDB-GENE-X\torphan\t\n"  # empty ensembl_id in map
+    )
+
+    def mock_download(url):
+        if "zfin_genes" in url:
+            return genes_data.encode("utf-8")
+        elif "aliases" in url:
+            return aliases_data.encode("utf-8")
+        elif "ensembl" in url:
+            return ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("zebrafish", reference_dir=ref_dir)
+
+    ref = load_reference("zebrafish", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+    sl = ref["symbol_lookup"]
+
+    # "nan" must never appear as a lookup string or a symbol
+    assert "nan" not in sl["lookup_string"].str.lower().tolist()
+    assert "nan" not in gt["symbol"].str.lower().tolist()
+    # Orphaned row (empty zfin_id) should be skipped
+    assert len(gt[gt["source_id"] == "ZFIN:"]) == 0
+    assert len(gt[gt["source_id"] == "ZFIN:nan"]) == 0
