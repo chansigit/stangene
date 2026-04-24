@@ -7,6 +7,10 @@ description: >
   or when working with single-cell transcriptomics datasets that need
   cross-dataset gene alignment. Do NOT use for format conversion to h5ad
   (that is stanobj) or for reading/inspecting h5ad files (that is scrna-reader).
+  Position in stan* family chain — Upstream: stanobj (consumes canonical h5ad
+  with raw counts layer when available). Downstream: stancounts (when X is
+  log1p-normalized — reverse to integer counts) or QC stage directly
+  (eca-curation 03_qc, driven by /eca-run).
 version: 1.0.0
 allowed-tools: [Bash, Read, Glob, Grep]
 ---
