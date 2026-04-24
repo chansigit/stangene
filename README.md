@@ -432,7 +432,7 @@ python -m pytest tests/test_pbmc3k.py -v
 python -m pytest tests/ -v
 ```
 
-133 unit tests + 26 integration tests covering: species config (human/mouse/rat/zebrafish/fruit_fly/c_elegans/cynomolgus/rhesus/marmoset/mouse_lemur), feature classification, I/O adapters (h5ad/TSV/CSV/TXT), reference building (HGNC/MGI/RGD/ZFIN/FlyBase/WormBase/Ensembl BioMart), all 5 harmonization tiers, case-insensitive matching, Excel corruption detection, withdrawn gene handling, conservative merge, markdown reporting, empty input handling, and end-to-end integration on the 10x pbmc3k dataset.
+142 unit tests + 26 integration tests covering: species config (human/mouse/rat/zebrafish/fruit_fly/c_elegans/cynomolgus/rhesus/marmoset/mouse_lemur), feature classification, I/O adapters (h5ad/TSV/CSV/TXT), reference building (HGNC/MGI/RGD/ZFIN/FlyBase/WormBase/Ensembl BioMart), all 5 harmonization tiers (including non-Ensembl FBgn/WBGene IDs), case-insensitive matching, Excel corruption detection, withdrawn gene handling, conservative merge, markdown reporting, empty input handling, and end-to-end integration on the 10x pbmc3k dataset.
 
 ---
 
