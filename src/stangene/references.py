@@ -768,9 +768,11 @@ def _build_ensembl_biomart_reference(config, ref_dir: str) -> None:
             by_eid[eid] = {"symbol": sym, "synonyms": set(), "gene_type": gtype}
         if syn:
             by_eid[eid]["synonyms"].add(syn)
-        # Prefer non-empty symbol if first row happened to have an empty one
+        # Prefer non-empty symbol/gene_type if first row had them empty
         if sym and not by_eid[eid]["symbol"]:
             by_eid[eid]["symbol"] = sym
+        if gtype and not by_eid[eid]["gene_type"]:
+            by_eid[eid]["gene_type"] = gtype
 
     rows = []
     for eid, info in by_eid.items():
