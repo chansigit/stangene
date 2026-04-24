@@ -287,3 +287,110 @@ def test_build_rat_metadata(ref_dir, mock_rgd_data):
         meta = json.load(f)
     assert meta["species"] == "rat"
     assert "rgd_genes" in meta["sources"]
+
+
+# ---------------------------------------------------------------------------
+# Zebrafish (ZFIN) tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_zfin_genes_data():
+    """Minimal ZFIN gene list (TSV, no header)."""
+    # Format: ZFIN_ID, SO_ID, Symbol, EnsemblID(optional — some rows may lack it)
+    return (
+        "ZDB-GENE-990415-8\tSO:0001217\ttp53\tENSDARG00000035559\n"
+        "ZDB-GENE-990415-72\tSO:0001217\tshha\tENSDARG00000068567\n"
+        "ZDB-GENE-000000-1\tSO:0001217\tnoensgene\t\n"
+    )
+
+
+@pytest.fixture
+def mock_zfin_aliases_data():
+    """ZFIN aliases file (TSV, no header)."""
+    # Format: ZFIN_ID, current_symbol, alias_symbol, alias_type
+    return (
+        "ZDB-GENE-990415-8\ttp53\tp53\tPREVIOUS NAME\n"
+        "ZDB-GENE-990415-8\ttp53\tzp53\tPREVIOUS NAME\n"
+        "ZDB-GENE-990415-72\tshha\tsonic hedgehog a\tALIAS\n"
+    )
+
+
+@pytest.fixture
+def mock_zfin_ensembl_data():
+    """ZFIN to Ensembl 1-to-1 mapping (TSV, no header)."""
+    return (
+        "ZDB-GENE-990415-8\ttp53\tENSDARG00000035559\n"
+        "ZDB-GENE-990415-72\tshha\tENSDARG00000068567\n"
+    )
+
+
+def test_build_zebrafish_creates_files(ref_dir, mock_zfin_genes_data, mock_zfin_aliases_data, mock_zfin_ensembl_data):
+    def mock_download(url):
+        if "zfin_genes" in url:
+            return mock_zfin_genes_data.encode("utf-8")
+        elif "aliases" in url:
+            return mock_zfin_aliases_data.encode("utf-8")
+        elif "ensembl" in url:
+            return mock_zfin_ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("zebrafish", reference_dir=ref_dir)
+
+    zf_dir = os.path.join(ref_dir, "zebrafish")
+    assert os.path.exists(os.path.join(zf_dir, "gene_table.parquet"))
+    assert os.path.exists(os.path.join(zf_dir, "symbol_lookup.parquet"))
+    assert os.path.exists(os.path.join(zf_dir, "build_metadata.json"))
+
+
+def test_build_zebrafish_gene_table(ref_dir, mock_zfin_genes_data, mock_zfin_aliases_data, mock_zfin_ensembl_data):
+    def mock_download(url):
+        if "zfin_genes" in url:
+            return mock_zfin_genes_data.encode("utf-8")
+        elif "aliases" in url:
+            return mock_zfin_aliases_data.encode("utf-8")
+        elif "ensembl" in url:
+            return mock_zfin_ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("zebrafish", reference_dir=ref_dir)
+
+    ref = load_reference("zebrafish", reference_dir=ref_dir)
+    gt = ref["gene_table"]
+
+    tp53 = gt[gt["symbol"] == "tp53"]
+    assert len(tp53) == 1
+    assert tp53.iloc[0]["ensembl_id"] == "ENSDARG00000035559"
+    assert tp53.iloc[0]["source_id"] == "ZFIN:ZDB-GENE-990415-8"
+    assert tp53.iloc[0]["source"] == "ZFIN"
+
+
+def test_build_zebrafish_symbol_lookup(ref_dir, mock_zfin_genes_data, mock_zfin_aliases_data, mock_zfin_ensembl_data):
+    def mock_download(url):
+        if "zfin_genes" in url:
+            return mock_zfin_genes_data.encode("utf-8")
+        elif "aliases" in url:
+            return mock_zfin_aliases_data.encode("utf-8")
+        elif "ensembl" in url:
+            return mock_zfin_ensembl_data.encode("utf-8")
+        return b""
+
+    with patch("stangene.references._download_file", side_effect=mock_download):
+        build_reference("zebrafish", reference_dir=ref_dir)
+
+    ref = load_reference("zebrafish", reference_dir=ref_dir)
+    sl = ref["symbol_lookup"]
+
+    # Approved symbol
+    tp53_approved = sl[(sl["lookup_string"] == "tp53") & (sl["lookup_type"] == "approved_symbol")]
+    assert len(tp53_approved) == 1
+
+    # "PREVIOUS NAME" alias_type → prev_symbol
+    p53_prev = sl[(sl["lookup_string"] == "p53") & (sl["lookup_type"] == "prev_symbol")]
+    assert len(p53_prev) == 1
+    assert p53_prev.iloc[0]["ensembl_id"] == "ENSDARG00000035559"
+
+    # "ALIAS" alias_type → alias_symbol
+    shha_alias = sl[(sl["lookup_string"] == "sonic hedgehog a") & (sl["lookup_type"] == "alias_symbol")]
+    assert len(shha_alias) == 1

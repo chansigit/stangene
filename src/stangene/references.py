@@ -5,6 +5,7 @@ import io
 import json
 import os
 import urllib.request
+from collections import defaultdict
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -63,6 +64,8 @@ def build_reference(
         _build_mouse_reference(config, ref_dir)
     elif config.name == "rat":
         _build_rat_reference(config, ref_dir)
+    elif config.name == "zebrafish":
+        _build_zebrafish_reference(config, ref_dir)
     else:
         raise ValueError(f"No reference builder for species: {species}")
 
@@ -394,3 +397,99 @@ def _build_rat_reference(config, ref_dir: str) -> None:
 
     _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
     logger.info("Built rat reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))
+
+
+def _build_zebrafish_reference(config, ref_dir: str) -> None:
+    """Build zebrafish reference from ZFIN (Zebrafish Information Network)."""
+    genes_url = config.reference_sources["zfin_genes"]["url"]
+    aliases_url = config.reference_sources["zfin_aliases"]["url"]
+    ensembl_url = config.reference_sources["zfin_ensembl"]["url"]
+
+    genes_raw = _download_file(genes_url)
+    aliases_raw = _download_file(aliases_url)
+    ensembl_raw = _download_file(ensembl_url)
+
+    genes_checksum = hashlib.sha256(genes_raw).hexdigest()
+    aliases_checksum = hashlib.sha256(aliases_raw).hexdigest()
+    ensembl_checksum = hashlib.sha256(ensembl_raw).hexdigest()
+
+    # ZFIN files are headerless TSVs
+    genes_df = pd.read_csv(
+        io.BytesIO(genes_raw), sep="\t", header=None,
+        names=["zfin_id", "so_id", "symbol", "ensembl_id"],
+        low_memory=False, dtype=str,
+    )
+
+    # Supplementary Ensembl mapping (used only if genes file lacks it)
+    ensembl_df = pd.read_csv(
+        io.BytesIO(ensembl_raw), sep="\t", header=None,
+        names=["zfin_id", "symbol_em", "ensembl_id_em"],
+        low_memory=False, dtype=str,
+    )
+    ensembl_map = dict(zip(ensembl_df["zfin_id"], ensembl_df["ensembl_id_em"]))
+
+    # Aliases file: zfin_id, current_symbol, alias_string, alias_type
+    aliases_df = pd.read_csv(
+        io.BytesIO(aliases_raw), sep="\t", header=None,
+        names=["zfin_id", "current_symbol", "alias_string", "alias_type"],
+        low_memory=False, dtype=str,
+    )
+
+    # Group aliases by zfin_id — separate PREVIOUS NAME vs ALIAS
+    prev_by_id = defaultdict(list)
+    alias_by_id = defaultdict(list)
+    for _, a in aliases_df.iterrows():
+        zid = a["zfin_id"]
+        alias_str = str(a["alias_string"]).strip()
+        atype = str(a["alias_type"]).strip().upper()
+        if not zid or not alias_str:
+            continue
+        if "PREVIOUS" in atype:
+            prev_by_id[zid].append(alias_str)
+        else:
+            alias_by_id[zid].append(alias_str)
+
+    rows = []
+    for _, g in genes_df.iterrows():
+        zid = str(g["zfin_id"]).strip()
+        symbol = str(g["symbol"]).strip() if pd.notna(g["symbol"]) else ""
+        if not symbol or not zid:
+            continue
+
+        ensembl_id = str(g["ensembl_id"]).strip() if pd.notna(g["ensembl_id"]) and str(g["ensembl_id"]).strip() else None
+        if not ensembl_id:
+            ensembl_id = ensembl_map.get(zid)
+        if ensembl_id and not ensembl_id.startswith("ENSDARG"):
+            ensembl_id = None
+
+        alias_symbols = "|".join(alias_by_id.get(zid, []))
+        prev_symbols = "|".join(prev_by_id.get(zid, []))
+
+        rows.append({
+            "ensembl_id": ensembl_id,
+            "symbol": symbol,
+            "alias_symbols": alias_symbols,
+            "prev_symbols": prev_symbols,
+            "gene_type": "",
+            "status": "approved",
+            "source": "ZFIN",
+            "source_id": f"ZFIN:{zid}",
+        })
+
+    gene_table = pd.DataFrame(rows)
+    symbol_lookup = _build_symbol_lookup(gene_table, source="ZFIN")
+
+    metadata = {
+        "species": "zebrafish",
+        "download_timestamp": datetime.now(timezone.utc).isoformat(),
+        "sources": {
+            "zfin_genes": {"url": genes_url, "sha256": genes_checksum, "rows": len(genes_df)},
+            "zfin_aliases": {"url": aliases_url, "sha256": aliases_checksum, "rows": len(aliases_df)},
+            "zfin_ensembl": {"url": ensembl_url, "sha256": ensembl_checksum, "rows": len(ensembl_df)},
+        },
+        "gene_count": len(gene_table),
+        "lookup_count": len(symbol_lookup),
+    }
+
+    _save_reference(ref_dir, gene_table, symbol_lookup, metadata)
+    logger.info("Built zebrafish reference: %d genes, %d lookup entries", len(gene_table), len(symbol_lookup))
