@@ -11,7 +11,7 @@ class SpeciesConfig:
     name: str
     ensembl_prefix: str
     transcript_prefix: str
-    naming_convention: str  # "uppercase" (human) or "capitalized" (mouse)
+    naming_convention: str  # "uppercase", "capitalized", or "lowercase"
     reference_sources: dict = field(default_factory=dict)
 
 
@@ -150,7 +150,7 @@ _SPECIES_CONFIGS: dict[str, SpeciesConfig] = {
     "c_elegans": SpeciesConfig(
         name="c_elegans",
         ensembl_prefix="WBGene",
-        transcript_prefix="",
+        transcript_prefix="",  # C. elegans transcripts have varied naming; no single prefix
         naming_convention="lowercase",
         reference_sources={
             "wormbase_gene_ids": {
