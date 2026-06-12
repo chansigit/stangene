@@ -1,4 +1,4 @@
-# StanGene
+# StanGene: Gene identifier harmonization for single-cell transcriptomics datasets
 
 <p align="center">
   <img src="docs/_static/logo.png" alt="StanGene logo" width="200">
