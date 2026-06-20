@@ -232,3 +232,35 @@ def get_species_config(species: str) -> SpeciesConfig:
             f"Unknown species: '{species}'. Supported: {list(_SPECIES_CONFIGS.keys())}"
         )
     return _SPECIES_CONFIGS[species_lower]
+
+
+# Short codes (and full names) accepted by resolve_species(). Every canonical
+# species name maps to itself; convenient abbreviations map onto it too.
+_SPECIES_ALIASES: dict[str, str] = {
+    "hs": "human", "human": "human",
+    "mm": "mouse", "mouse": "mouse",
+    "rn": "rat", "rat": "rat",
+    "dr": "zebrafish", "zebrafish": "zebrafish",
+    "dm": "fruit_fly", "fruit_fly": "fruit_fly", "fruitfly": "fruit_fly",
+    "ce": "c_elegans", "c_elegans": "c_elegans", "celegans": "c_elegans",
+    "cyno": "cynomolgus", "cynomolgus": "cynomolgus",
+    "rhesus": "rhesus",
+    "marmoset": "marmoset",
+    "lemur": "mouse_lemur", "mouse_lemur": "mouse_lemur",
+}
+
+
+def resolve_species(code: str) -> str:
+    """Resolve a species short code or full name to a canonical species name.
+
+    Accepts e.g. 'hs'/'human', 'mm'/'mouse', 'rhesus', 'mouse_lemur' (case- and
+    surrounding-whitespace-insensitive). Raises ValueError on an unknown code,
+    listing the supported codes.
+    """
+    key = str(code).strip().lower()
+    if key in _SPECIES_ALIASES:
+        return _SPECIES_ALIASES[key]
+    raise ValueError(
+        f"Unknown species code {code!r}. Supported codes: "
+        f"{sorted(_SPECIES_ALIASES)}"
+    )
