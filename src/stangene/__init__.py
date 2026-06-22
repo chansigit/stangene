@@ -1,6 +1,6 @@
 """Stangene: gene identifier harmonization for single-cell transcriptomics."""
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 import pandas as pd
 
@@ -16,6 +16,7 @@ from stangene.references import (
 from stangene.report import conflict_report, generate_markdown_report, summary, write_reports
 from stangene.species import resolve_species
 from stangene.mito import mito_mask
+from stangene.hb import hb_mask
 from stangene._logging import get_logger
 
 _logger = get_logger("run")
