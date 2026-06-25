@@ -1,5 +1,63 @@
+import os
+
+import pandas as pd
 import pytest
+
 from stangene.biotype import CANONICAL_BIOTYPES, normalize_biotype
+
+_REFS_DIR = os.path.join(
+    os.path.dirname(__file__), "..", "src", "stangene", "data", "refs"
+)
+
+
+def _gene_table(species: str) -> pd.DataFrame:
+    path = os.path.join(_REFS_DIR, species, "gene_table.parquet")
+    if not os.path.exists(path):
+        pytest.skip(f"Reference not built for {species}")
+    return pd.read_parquet(path)
+
+
+@pytest.mark.parametrize("species", [
+    "human", "mouse", "rat", "c_elegans",
+    "cynomolgus", "rhesus", "marmoset", "mouse_lemur",
+])
+def test_canonical_biotype_column_exists(species):
+    gt = _gene_table(species)
+    assert "canonical_biotype" in gt.columns, f"{species}: missing canonical_biotype"
+
+
+@pytest.mark.parametrize("species", [
+    "human", "mouse", "rat", "c_elegans",
+    "cynomolgus", "rhesus", "marmoset", "mouse_lemur",
+])
+def test_canonical_biotype_no_nulls(species):
+    gt = _gene_table(species)
+    if "canonical_biotype" not in gt.columns:
+        pytest.skip("column absent")
+    assert gt["canonical_biotype"].isna().sum() == 0, f"{species}: NaN in canonical_biotype"
+
+
+@pytest.mark.parametrize("species", [
+    "human", "mouse", "rat", "c_elegans",
+    "cynomolgus", "rhesus", "marmoset", "mouse_lemur",
+])
+def test_canonical_biotype_in_vocabulary(species):
+    gt = _gene_table(species)
+    if "canonical_biotype" not in gt.columns:
+        pytest.skip("column absent")
+    bad = set(gt["canonical_biotype"].unique()) - CANONICAL_BIOTYPES
+    assert not bad, f"{species}: out-of-vocabulary values: {bad}"
+
+
+@pytest.mark.parametrize("species", [
+    "human", "mouse", "rat",
+])
+def test_canonical_biotype_has_protein_coding(species):
+    gt = _gene_table(species)
+    if "canonical_biotype" not in gt.columns:
+        pytest.skip("column absent")
+    n = (gt["canonical_biotype"] == "protein_coding").sum()
+    assert n > 10_000, f"{species}: unexpectedly few protein_coding genes ({n})"
 
 
 # --- vocabulary ---

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from stangene._logging import get_logger
+from stangene.biotype import normalize_biotype
 from stangene.species import get_species_config
 
 logger = get_logger("references")
@@ -187,11 +188,14 @@ def _build_human_reference(config, ref_dir: str) -> None:
         "symbol": hgnc["symbol"],
         "alias_symbols": hgnc["alias_symbol"].fillna(""),
         "prev_symbols": hgnc["prev_symbol"].fillna(""),
-        "gene_type": hgnc.get("locus_group", pd.Series(dtype=str)).fillna(""),
+        "gene_type": hgnc.get("locus_type", pd.Series("", index=hgnc.index, dtype=str)).fillna(""),
         "status": hgnc["status"].fillna(""),
         "source": "HGNC",
         "source_id": hgnc["hgnc_id"],
     })
+    gene_table["canonical_biotype"] = gene_table.apply(
+        lambda r: normalize_biotype(r["gene_type"], source="HGNC"), axis=1
+    )
 
     symbol_lookup = _build_symbol_lookup(gene_table, source="HGNC")
 
@@ -274,6 +278,9 @@ def _build_mouse_reference(config, ref_dir: str) -> None:
         })
 
     gene_table = pd.DataFrame(rows)
+    gene_table["canonical_biotype"] = gene_table.apply(
+        lambda r: normalize_biotype(r["gene_type"], source="MGI"), axis=1
+    )
 
     # Filter to actual gene records. MGI "markers" also include enhancers,
     # promoters, CTCF binding sites, CpG islands, TSS clusters, DNA segments,
@@ -414,6 +421,9 @@ def _build_rat_reference(config, ref_dir: str) -> None:
         })
 
     gene_table = pd.DataFrame(rows)
+    gene_table["canonical_biotype"] = gene_table.apply(
+        lambda r: normalize_biotype(r["gene_type"], source="RGD"), axis=1
+    )
     symbol_lookup = _build_symbol_lookup(gene_table, source="RGD")
 
     metadata = {
@@ -716,6 +726,9 @@ def _build_celegans_reference(config, ref_dir: str) -> None:
         })
 
     gene_table = pd.DataFrame(rows)
+    gene_table["canonical_biotype"] = gene_table.apply(
+        lambda r: normalize_biotype(r["gene_type"], source="WormBase"), axis=1
+    )
     symbol_lookup = _build_symbol_lookup(gene_table, source="WormBase")
 
     metadata = {
@@ -838,6 +851,9 @@ def _build_ensembl_biomart_reference(config, ref_dir: str) -> None:
         })
 
     gene_table = pd.DataFrame(rows)
+    gene_table["canonical_biotype"] = gene_table.apply(
+        lambda r: normalize_biotype(r["gene_type"], source="Ensembl"), axis=1
+    )
     symbol_lookup = _build_symbol_lookup(gene_table, source="Ensembl")
 
     metadata = {
