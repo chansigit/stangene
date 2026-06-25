@@ -214,6 +214,34 @@ def test_flybase_mappings(raw, expected):
     assert normalize_biotype(raw, "FlyBase") == expected
 
 
+def test_zebrafish_canonical_biotype_column_exists():
+    gt = _gene_table("zebrafish")
+    assert "canonical_biotype" in gt.columns
+
+
+def test_zebrafish_canonical_biotype_no_nulls():
+    gt = _gene_table("zebrafish")
+    if "canonical_biotype" not in gt.columns:
+        pytest.skip("column absent")
+    assert gt["canonical_biotype"].isna().sum() == 0
+
+
+def test_zebrafish_canonical_biotype_in_vocabulary():
+    gt = _gene_table("zebrafish")
+    if "canonical_biotype" not in gt.columns:
+        pytest.skip("column absent")
+    bad = set(gt["canonical_biotype"].unique()) - CANONICAL_BIOTYPES
+    assert not bad, f"out-of-vocabulary: {bad}"
+
+
+def test_zebrafish_has_protein_coding():
+    gt = _gene_table("zebrafish")
+    if "canonical_biotype" not in gt.columns:
+        pytest.skip("column absent")
+    n = (gt["canonical_biotype"] == "protein_coding").sum()
+    assert n > 5_000, f"unexpectedly few protein_coding genes: {n}"
+
+
 # --- unknown source / unknown value ---
 
 def test_unknown_source_returns_unknown():

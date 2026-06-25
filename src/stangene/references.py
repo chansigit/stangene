@@ -511,18 +511,23 @@ def _build_zebrafish_reference(config, ref_dir: str) -> None:
         alias_symbols = "|".join(alias_by_id.get(zid, []))
         prev_symbols = "|".join(prev_by_id.get(zid, []))
 
+        so_id_raw = str(g["so_id"]).strip() if pd.notna(g["so_id"]) else ""
+
         rows.append({
             "ensembl_id": ensembl_id,
             "symbol": symbol,
             "alias_symbols": alias_symbols,
             "prev_symbols": prev_symbols,
-            "gene_type": "",
+            "gene_type": so_id_raw,       # store the SO ID as gene_type for traceability
             "status": "approved",
             "source": "ZFIN",
             "source_id": f"ZFIN:{zid}",
         })
 
     gene_table = pd.DataFrame(rows)
+    gene_table["canonical_biotype"] = gene_table.apply(
+        lambda r: normalize_biotype(r["gene_type"], source="ZFIN"), axis=1
+    )
     symbol_lookup = _build_symbol_lookup(gene_table, source="ZFIN")
 
     metadata = {
