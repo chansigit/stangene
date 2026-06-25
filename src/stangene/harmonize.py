@@ -150,9 +150,9 @@ def harmonize(ft: pd.DataFrame, ref: dict) -> HarmonizationResult:
                 if status_lower.startswith("entry withdrawn") or status_lower == "withdrawn":
                     confidence = "medium"
                     notes.append("Matched withdrawn gene")
-                gene_type = gene_info.get("gene_type", "")
-                if gene_type and "protein" not in str(gene_type).lower():
-                    notes.append(f"Non-protein-coding gene type: {gene_type}")
+                canonical = gene_info.get("canonical_biotype", "unknown")
+                if canonical not in ("protein_coding", "unknown"):
+                    notes.append(f"Non-protein-coding: {canonical}")
             _apply_lookup_match(result, idx, match, eid_to_gene, sid_to_gene,
                                 "exact_symbol", confidence, notes)
             continue
