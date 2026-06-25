@@ -22,6 +22,24 @@ Designed to be invoked as a Claude Code / Codex skill or used as a standalone Py
 
 ---
 
+## Before & After
+
+A typical 10x Genomics feature table arrives with inconsistent, version-tagged, or Excel-corrupted identifiers. StanGene cleans and standardises everything in one pass:
+
+| Original input | Problem | After harmonization |
+|---|---|---|
+| `ENSG00000141510.18` | Versioned Ensembl ID | → `ENSG00000141510` · `TP53` · `exact_id` · high |
+| `p53` | Alias, not approved symbol | → `ENSG00000141510` · `TP53` · `alias_symbol` · medium |
+| `1-Mar` | Excel auto-date corruption | → unmapped · flagged in report |
+| `MARCH1` | HGNC-renamed in 2020 | → `ENSG00000145416` · `MARCHF1` · flagged |
+| `CD8a` | Wrong capitalisation | → `ENSG00000153563` · `CD8A` · `exact_symbol` · high |
+| `ENSMFAG00000000001` | Non-human Ensembl ID | → matched in cynomolgus reference |
+| `CD3_TotalSeqB` | Antibody capture, not a gene | → labeled `non_gene_feature`, passed through |
+
+Every original identifier is preserved. Harmonized identifiers live in new columns — nothing is overwritten.
+
+---
+
 ## Workflow
 
 ```mermaid
@@ -173,6 +191,37 @@ stangene harmonize --input my_data.h5ad --species human --output-dir results/
 | `conflicts.tsv` | Many-to-one collisions, ambiguities, outdated names |
 | `unmapped.tsv` | Unmapped features for manual review |
 | `*_harmonized.h5ad` | Enriched h5ad with harmonization columns in `adata.var` (if input was h5ad) |
+
+### 4. Single-cell QC preparation
+
+After harmonization, StanGene can generate the boolean masks that feed directly into scanpy/AnnData QC metrics — **no manual gene-list curation needed**.
+
+```python
+import stangene
+import scanpy as sc
+
+adata = sc.read_h5ad("my_data.h5ad")
+result = stangene.run(path="my_data.h5ad", species="human")
+
+# Canonical symbols from the harmonization result
+symbols = result.mapping_table["gene_symbol_harmonized"].fillna(
+    result.mapping_table["original_feature_name"]
+)
+
+# One line per QC metric
+adata.var["is_mito"]  = stangene.mito_mask(symbols, "human")   # MT- prefix genes
+adata.var["is_hb"]    = stangene.hb_mask(symbols, "human")     # HBA1, HBB, …
+adata.var["biotype"]  = result.mapping_table["canonical_biotype"].values
+
+# Feed into scanpy QC
+sc.pp.calculate_qc_metrics(
+    adata,
+    qc_vars=["is_mito", "is_hb"],
+    inplace=True,
+)
+```
+
+`canonical_biotype` uses a unified 13-category vocabulary (`protein_coding`, `lncRNA`, `pseudogene`, `miRNA`, `rRNA`, …) normalised from HGNC / MGI / RGD / Ensembl / WormBase / ZFIN / FlyBase — the same vocabulary across all 10 supported species.
 
 ---
 
