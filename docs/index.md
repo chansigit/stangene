@@ -26,6 +26,9 @@ api/harmonize
 api/merge
 api/report
 api/species
+api/mito
+api/hb
+api/biotype
 ```
 
 ```{toctree}

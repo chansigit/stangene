@@ -16,8 +16,17 @@ pip install -e ".[dev]"
 Before harmonizing, build the reference annotation databases. This is a one-time step per species.
 
 ```bash
-stangene build-refs --species human   # downloads HGNC (~15 MB)
-stangene build-refs --species mouse   # downloads MGI + BioMart (~10 MB)
+stangene build-refs --species human       # downloads HGNC (~15 MB)
+stangene build-refs --species mouse       # downloads MGI + BioMart (~10 MB)
+stangene build-refs --species rat         # downloads RGD (~5 MB)
+stangene build-refs --species zebrafish   # downloads ZFIN
+stangene build-refs --species fruit_fly   # downloads FlyBase
+stangene build-refs --species c_elegans   # downloads WormBase
+# Ensembl-only (BioMart) species:
+stangene build-refs --species cynomolgus
+stangene build-refs --species rhesus
+stangene build-refs --species marmoset
+stangene build-refs --species mouse_lemur
 ```
 
 Or from Python:
@@ -25,8 +34,13 @@ Or from Python:
 ```python
 from stangene import build_reference
 
-build_reference("human")
-build_reference("mouse")
+# Dedicated nomenclature authorities
+for sp in ["human", "mouse", "rat", "zebrafish", "fruit_fly", "c_elegans"]:
+    build_reference(sp)
+
+# Ensembl BioMart (no dedicated authority)
+for sp in ["cynomolgus", "rhesus", "marmoset", "mouse_lemur"]:
+    build_reference(sp)
 ```
 
 References are stored in a local `references/` directory (gitignored by default). Re-run with `--force` to update from the latest upstream sources.
@@ -70,6 +84,37 @@ After running, the output directory contains:
 | `*_harmonized.h5ad` | Enriched h5ad with harmonization columns in `adata.var` |
 
 The markdown report (`report.md`) is the best starting point for understanding your results. It includes summary tables, tier breakdowns, conflict details, and warnings about potential issues like Excel-corrupted gene names.
+
+## Step 4: Single-cell QC preparation
+
+After harmonization, stangene can generate the boolean masks that feed directly into scanpy/AnnData QC metrics — no manual gene-list curation needed.
+
+```python
+import stangene
+import scanpy as sc
+
+adata = sc.read_h5ad("my_data.h5ad")
+result = stangene.run(path="my_data.h5ad", species="human")
+
+# Canonical symbols from the harmonization result
+symbols = result.mapping_table["gene_symbol_harmonized"].fillna(
+    result.mapping_table["original_feature_name"]
+)
+
+# One line per QC metric
+adata.var["is_mito"]  = stangene.mito_mask(symbols, "human")   # MT- prefix genes
+adata.var["is_hb"]    = stangene.hb_mask(symbols, "human")     # HBA1, HBB, ...
+adata.var["biotype"]  = result.mapping_table["canonical_biotype"].values
+
+# Feed into scanpy QC
+sc.pp.calculate_qc_metrics(
+    adata,
+    qc_vars=["is_mito", "is_hb"],
+    inplace=True,
+)
+```
+
+`canonical_biotype` uses a unified 13-category vocabulary (`protein_coding`, `lncRNA`, `pseudogene`, `miRNA`, `rRNA`, ...) normalised from HGNC / MGI / RGD / Ensembl / WormBase / ZFIN / FlyBase — the same vocabulary across all 10 supported species.
 
 ## Example output
 

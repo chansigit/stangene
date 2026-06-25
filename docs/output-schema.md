@@ -20,6 +20,7 @@ The harmonization table (`harmonization_table.tsv`) contains one row per origina
 | `mapping_confidence` | `high`, `medium`, `low`, or null | Yes |
 | `mapping_source` | Lookup that resolved this feature | Mapped only |
 | `mapping_notes` | Warnings, candidates, version mismatches | When applicable |
+| `canonical_biotype` | Normalised gene biotype from a 13-category vocabulary; `unknown` if biotype unavailable | Mapped only |
 | `stangene_version` | Version of stangene that produced this mapping | Yes |
 
 ## Mapping status values

@@ -36,6 +36,65 @@ Provides:
 - [MGI-to-Ensembl mapping](https://www.informatics.jax.org/downloads/reports/MRK_ENSEMBL.rpt) — MGI ID to Ensembl ID links
 - Ensembl BioMart (supplementary, non-fatal if unavailable) — fills Ensembl ID gaps for mouse genes not covered by MGI mapping
 
+## Rat (RGD)
+
+**Source:** [RGD rat gene file](https://download.rgd.mcw.edu/data_release/RAT/GENES_RAT.txt) (~5 MB)
+
+Provides:
+- Approved gene symbols (SYMBOL)
+- Previous symbols (OLD_SYMBOL, semicolon-separated)
+- Ensembl gene IDs (ENSRNOG prefix; multi-valued field, first canonical ID used)
+- RGD gene IDs
+- Gene types (protein-coding, ncRNA, lncRNA, etc.)
+- Nomenclature status (APPROVED, PROVISIONAL, INTERIM)
+
+## Zebrafish (ZFIN)
+
+**Sources:**
+- [ZFIN gene list](https://zfin.org/downloads/gene.txt) — primary gene identifiers with Ensembl IDs (ENSDARG prefix)
+- [ZFIN aliases](https://zfin.org/downloads/aliases.txt) — alias and previous symbols, typed by `PREVIOUS NAME` vs other alias types
+- [ZFIN Ensembl 1:1 mapping](https://zfin.org/downloads/ensembl_1_to_1.txt) — supplementary ZFIN-to-Ensembl mapping for gap filling
+
+## Fruit Fly (FlyBase)
+
+**Sources:**
+- [FlyBase FBgn annotation ID mapping](https://s3ftp.flybase.org/releases/current/precomputed_files/genes/fbgn_annotation_ID.tsv.gz) — primary FBgn IDs with current gene symbols and annotation IDs; Drosophila melanogaster only
+- [FlyBase synonyms](https://s3ftp.flybase.org/releases/current/precomputed_files/synonyms/fb_synonym_fb_2026_01.tsv.gz) — symbol synonyms and secondary FBgn IDs (previous IDs); versioned filename, bump the release suffix when FlyBase publishes a new release
+
+Note: FBgn IDs serve as the primary Ensembl-equivalent identifiers. Biotype is inferred from annotation ID prefix: `CG*` → protein_coding, `CR*` → other_ncrna.
+
+## C. elegans (WormBase)
+
+**Sources:**
+- [WormBase geneIDs](https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/annotation/c_elegans.PRJNA13758.WS298.geneIDs.txt.gz) — WBGene IDs with public names, sequence names, biotypes, and live/dead status
+- [WormBase geneOtherIDs](https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/annotation/c_elegans.PRJNA13758.WS298.geneOtherIDs.txt.gz) — other names (aliases) per WBGene
+
+Note: WBGene IDs serve as the primary identifiers (Ensembl-equivalent). File URLs carry a WormBase release number (WS298); bump when a new release ships. As of 2026-06, `downloads.wormbase.org` returns HTTP 403 — update the URL when this is resolved.
+
+## Cynomolgus macaque (Ensembl BioMart)
+
+**Source:** [Ensembl BioMart](https://www.ensembl.org/biomart/martservice?query=) — dataset `mfascicularis_gene_ensembl` (*Macaca fascicularis*)
+
+Provides Ensembl gene IDs (ENSMFAG prefix), gene symbols, synonyms, and gene biotypes via BioMart's `external_gene_name`, `external_synonym`, and `gene_biotype` attributes. No dedicated nomenclature authority exists for this species. Previous symbols are not tracked by BioMart.
+
+## Rhesus macaque (Ensembl BioMart)
+
+**Source:** [Ensembl BioMart](https://www.ensembl.org/biomart/martservice?query=) — dataset `mmulatta_gene_ensembl` (*Macaca mulatta*)
+
+Provides Ensembl gene IDs (ENSMMUG prefix), gene symbols, synonyms, and gene biotypes. No dedicated nomenclature authority exists for this species.
+
+## Common marmoset (Ensembl BioMart)
+
+**Source:** [Ensembl BioMart](https://www.ensembl.org/biomart/martservice?query=) — dataset `cjacchus_gene_ensembl` (*Callithrix jacchus*)
+
+Provides Ensembl gene IDs (ENSCJAG prefix), gene symbols, synonyms, and gene biotypes. No dedicated nomenclature authority exists for this species.
+
+## Mouse lemur (Ensembl BioMart)
+
+**Source:** [Ensembl BioMart](https://www.ensembl.org/biomart/martservice?query=) — dataset `mmurinus_gene_ensembl` (*Microcebus murinus*)
+
+Provides Ensembl gene IDs (ENSMICG prefix), gene symbols, synonyms, and gene biotypes. No dedicated nomenclature authority exists for this species.
+
 ## Internal format
 
 Built references are stored as parquet files:
@@ -56,6 +115,7 @@ references/<species>/
 | `alias_symbols` | Pipe-delimited alias symbols |
 | `prev_symbols` | Pipe-delimited previous symbols |
 | `gene_type` | Gene biotype (protein-coding, lncRNA, etc.) |
+| `canonical_biotype` | Normalised biotype using a 13-category vocabulary (protein_coding, lncRNA, pseudogene, miRNA, snoRNA, snRNA, rRNA, tRNA, IG_gene, TR_gene, other_ncrna, other, unknown) |
 | `status` | Approval status (Approved / Entry Withdrawn) |
 | `source` | Reference authority (HGNC / MGI) |
 | `source_id` | Authority-specific ID (HGNC:12345 / MGI:12345) |
