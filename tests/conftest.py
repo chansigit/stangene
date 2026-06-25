@@ -10,19 +10,19 @@ def mock_gene_table():
     return pd.DataFrame([
         {"ensembl_id": "ENSG00000141510", "symbol": "TP53", "alias_symbols": "LFS1|p53",
          "prev_symbols": "LFS1", "gene_type": "protein-coding gene", "status": "Approved",
-         "source": "HGNC", "source_id": "HGNC:11998"},
+         "source": "HGNC", "source_id": "HGNC:11998", "canonical_biotype": "protein_coding"},
         {"ensembl_id": "ENSG00000012048", "symbol": "BRCA1", "alias_symbols": "RNF53|IRIS",
          "prev_symbols": "RNF53", "gene_type": "protein-coding gene", "status": "Approved",
-         "source": "HGNC", "source_id": "HGNC:1100"},
+         "source": "HGNC", "source_id": "HGNC:1100", "canonical_biotype": "protein_coding"},
         {"ensembl_id": "ENSG00000139618", "symbol": "BRCA2", "alias_symbols": "FACD|FANCD1",
          "prev_symbols": "FACD", "gene_type": "protein-coding gene", "status": "Approved",
-         "source": "HGNC", "source_id": "HGNC:1101"},
+         "source": "HGNC", "source_id": "HGNC:1101", "canonical_biotype": "protein_coding"},
         {"ensembl_id": "ENSG00000136997", "symbol": "MYC", "alias_symbols": "",
          "prev_symbols": "", "gene_type": "protein-coding gene", "status": "Approved",
-         "source": "HGNC", "source_id": "HGNC:7553"},
+         "source": "HGNC", "source_id": "HGNC:7553", "canonical_biotype": "protein_coding"},
         {"ensembl_id": None, "symbol": "WITHDRAWN1", "alias_symbols": "",
          "prev_symbols": "", "gene_type": "pseudogene", "status": "Entry Withdrawn",
-         "source": "HGNC", "source_id": "HGNC:99999"},
+         "source": "HGNC", "source_id": "HGNC:99999", "canonical_biotype": "pseudogene"},
     ])
 
 

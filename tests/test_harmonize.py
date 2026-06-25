@@ -286,6 +286,39 @@ class TestFlyBaseHarmonization:
         assert row["gene_id_harmonized"] == "FBgn0003996"
 
 
+class TestNonProteinCodingNote:
+    def test_non_protein_coding_note_in_mapping_notes(self, mock_ref):
+        """Matching a non-protein-coding gene should add 'Non-protein-coding: <biotype>' to mapping_notes."""
+        import pandas as _pd
+
+        # Add a non-withdrawn lncRNA gene to gene_table and symbol_lookup
+        extra_gene = _pd.DataFrame([{
+            "ensembl_id": "ENSG00000260612", "symbol": "LINC00261",
+            "alias_symbols": "", "prev_symbols": "",
+            "gene_type": "lncRNA gene", "status": "Approved",
+            "source": "HGNC", "source_id": "HGNC:27518",
+            "canonical_biotype": "lncRNA",
+        }])
+        extra_lookup = _pd.DataFrame([{
+            "lookup_string": "LINC00261", "lookup_string_upper": "LINC00261",
+            "ensembl_id": "ENSG00000260612", "source_id": "HGNC:27518",
+            "lookup_type": "approved_symbol", "source": "HGNC",
+        }])
+        mock_ref["gene_table"] = _pd.concat(
+            [mock_ref["gene_table"], extra_gene], ignore_index=True,
+        )
+        mock_ref["symbol_lookup"] = _pd.concat(
+            [mock_ref["symbol_lookup"], extra_lookup], ignore_index=True,
+        )
+
+        ft = _make_ft(["LINC00261"])
+        result = harmonize(ft, mock_ref)
+        row = result.mapping_table.iloc[0]
+        assert row["mapping_status"] == "exact_symbol"
+        assert row["gene_id_harmonized"] == "ENSG00000260612"
+        assert "Non-protein-coding: lncRNA" in str(row["mapping_notes"])
+
+
 class TestBioMartHarmonization:
     def test_exact_ensmfag_id_matches_tier1(self):
         """ENSMFAG (cynomolgus) ID should match Tier 1."""

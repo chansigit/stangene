@@ -69,6 +69,7 @@ def _build_gene_info_dicts(gene_table: pd.DataFrame):
             "status": row.status if pd.notna(row.status) else "",
             "gene_type": row.gene_type if pd.notna(row.gene_type) else "",
             "source_id": row.source_id,
+            "canonical_biotype": row.canonical_biotype if hasattr(row, "canonical_biotype") and pd.notna(row.canonical_biotype) else "unknown",
         }
         if pd.notna(row.ensembl_id):
             eid_to_gene[row.ensembl_id] = gene_info

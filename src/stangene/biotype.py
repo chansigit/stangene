@@ -181,9 +181,7 @@ def normalize_biotype(raw: str, source: str) -> str:
             return "protein_coding"
         if key.startswith("cr"):
             return "other_ncrna"
-        if key:
-            return "other"
-        return "unknown"
+        return "other"
 
     source_map = _SOURCE_MAPS.get(source)
     if source_map is None:
