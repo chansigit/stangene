@@ -278,9 +278,6 @@ def _build_mouse_reference(config, ref_dir: str) -> None:
         })
 
     gene_table = pd.DataFrame(rows)
-    gene_table["canonical_biotype"] = gene_table.apply(
-        lambda r: normalize_biotype(r["gene_type"], source="MGI"), axis=1
-    )
 
     # Filter to actual gene records. MGI "markers" also include enhancers,
     # promoters, CTCF binding sites, CpG islands, TSS clusters, DNA segments,
@@ -289,6 +286,10 @@ def _build_mouse_reference(config, ref_dir: str) -> None:
     pre_filter_count = len(gene_table)
     gene_table = gene_table[gene_table["gene_type"].str.contains("gene", case=False, na=False)].reset_index(drop=True)
     logger.info("MGI filter: kept %d gene records out of %d markers", len(gene_table), pre_filter_count)
+
+    gene_table["canonical_biotype"] = gene_table.apply(
+        lambda r: normalize_biotype(r["gene_type"], source="MGI"), axis=1
+    )
 
     # Supplementary BioMart fill (non-fatal if it fails)
     biomart_url = config.reference_sources.get("ensembl_biomart", {}).get("url", "")

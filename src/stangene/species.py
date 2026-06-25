@@ -159,6 +159,7 @@ _SPECIES_CONFIGS: dict[str, SpeciesConfig] = {
         reference_sources={
             # WormBase has no "current"-named symlink for these files; filenames
             # carry the release number (e.g. WS298). Bump when a new release ships.
+            # TODO: WormBase downloads.wormbase.org returns HTTP 403 as of 2026-06; update URL when fixed.
             "wormbase_gene_ids": {
                 "url": "https://downloads.wormbase.org/releases/current-production-release/species/c_elegans/PRJNA13758/annotation/c_elegans.PRJNA13758.WS298.geneIDs.txt.gz",
                 "description": "WormBase C. elegans gene IDs with public names and biotypes",

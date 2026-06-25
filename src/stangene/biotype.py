@@ -127,6 +127,10 @@ _WORMBASE_MAP: dict[str, str] = {
     "scrna_gene":                "other_ncrna",
     "transposable_element_gene": "other",
     "operon":                    "other",
+    "gene":                      "other",        # generic unclassified WormBase gene
+    "lincrna_gene":              "lncRNA",       # long intergenic ncRNA
+    "antisense_lncrna_gene":     "lncRNA",       # antisense lncRNA
+    "transcript":                "other",        # data artifact
 }
 
 # ZFIN: SO (Sequence Ontology) ID, e.g. "SO:0001217"
