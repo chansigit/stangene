@@ -1,15 +1,15 @@
 {
   "species": "mouse",
-  "download_timestamp": "2026-04-24T02:31:34.707593+00:00",
+  "download_timestamp": "2026-06-25T07:18:56.012031+00:00",
   "sources": {
     "mgi_markers": {
       "url": "https://www.informatics.jax.org/downloads/reports/MRK_List2.rpt",
-      "sha256": "4940f34dc4a93df3811cd8b5b3a5c2a68f25db819f5ab7363597e68d17ccc96e",
-      "rows": 656647
+      "sha256": "f086d3c772a504be243d173693df6cfdcf4329f607be101eb5fd7fd790140d16",
+      "rows": 656698
     },
     "mgi_ensembl": {
       "url": "https://www.informatics.jax.org/downloads/reports/MRK_ENSEMBL.rpt",
-      "sha256": "d89b857936c14e62b23f194b593893be2adce4c8ed54608f192579d0f7ba7708",
+      "sha256": "d6133fb96e07aeeccee86be8545f31c52dfb0dda81d2329b287f90e88fdde756",
       "rows": 77644
     },
     "ensembl_biomart": {
@@ -17,6 +17,6 @@
       "note": "supplementary Ensembl ID gap fill"
     }
   },
-  "gene_count": 100475,
-  "lookup_count": 161137
+  "gene_count": 100509,
+  "lookup_count": 161293
 }

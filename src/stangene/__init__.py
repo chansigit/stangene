@@ -1,6 +1,6 @@
 """Stangene: gene identifier harmonization for single-cell transcriptomics."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 import pandas as pd
 
