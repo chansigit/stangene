@@ -1,10 +1,10 @@
 {
   "species": "fruit_fly",
-  "download_timestamp": "2026-04-24T02:32:16.776106+00:00",
+  "download_timestamp": "2026-06-25T07:43:30.043674+00:00",
   "sources": {
     "flybase_gene_map": {
       "url": "https://s3ftp.flybase.org/releases/current/precomputed_files/genes/fbgn_annotation_ID.tsv.gz",
-      "sha256": "02d162465aafa634d67b48b5b0efcc8f094311bb4647ff9b94cf4713f0e81aba",
+      "sha256": "d48298573536bbd049c082691f6631e732c18d31bc310abd777c0b6996518a17",
       "rows": 17871
     },
     "flybase_synonyms": {
@@ -14,5 +14,5 @@
     }
   },
   "gene_count": 17871,
-  "lookup_count": 111051
+  "lookup_count": 111050
 }

@@ -596,6 +596,10 @@ def _build_fruitfly_reference(config, ref_dir: str) -> None:
     sym_col = _require_col(map_df, "gene_symbol", "gene_symbol")
     primary_col = _require_col(map_df, "primary_FBgn", "primary_FBgn")
     secondary_col = next((c for c in map_df.columns if "secondary_FBgn" in c), None)
+    annotation_col = next(
+        (c for c in map_df.columns if "annotation_id" in c.lower() and "secondary" not in c.lower()),
+        None,
+    )
 
     # Filter to Dmel only (some files include other Drosophila species)
     if "organism_abbreviation" in map_df.columns:
@@ -632,18 +636,25 @@ def _build_fruitfly_reference(config, ref_dir: str) -> None:
 
         alias_syms = syn_by_fbgn.get(fbgn, [])
 
+        annotation_id = ""
+        if annotation_col and pd.notna(m[annotation_col]):
+            annotation_id = str(m[annotation_col]).strip()
+
         rows.append({
             "ensembl_id": fbgn,  # FlyBase FBgn is the primary gene ID
             "symbol": symbol,
             "alias_symbols": "|".join(alias_syms),
             "prev_symbols": "|".join(prev_fbgns),
-            "gene_type": "",
+            "gene_type": annotation_id,     # CG* = protein_coding, CR* = other_ncrna
             "status": "approved",
             "source": "FlyBase",
             "source_id": f"FlyBase:{fbgn}",
         })
 
     gene_table = pd.DataFrame(rows)
+    gene_table["canonical_biotype"] = gene_table.apply(
+        lambda r: normalize_biotype(r["gene_type"], source="FlyBase"), axis=1
+    )
     symbol_lookup = _build_symbol_lookup(gene_table, source="FlyBase")
 
     metadata = {
