@@ -260,6 +260,14 @@ stangene.write_reports(result, output_dir)
 
 # Optional merge
 merge_result = stangene.merge_features(result, policy="strict")
+
+# Special gene masks (QC)
+mito = stangene.mito_mask(symbols, species)   # mitochondrial genes
+hb   = stangene.hb_mask(symbols, species)     # hemoglobin genes
+
+# Biotype normalization
+stangene.CANONICAL_BIOTYPES                   # frozenset of 13 canonical categories
+label = stangene.normalize_biotype(raw, source)  # raw gene_type string → canonical label
 ```
 
 ### `stangene.run()`
@@ -340,7 +348,7 @@ references/<species>/
   build_metadata.json      # source URLs, timestamps, checksums
 ```
 
-`gene_table` columns: `ensembl_id`, `symbol`, `alias_symbols`, `prev_symbols`, `gene_type`, `status`, `source`, `source_id`
+`gene_table` columns: `ensembl_id`, `symbol`, `alias_symbols`, `prev_symbols`, `gene_type`, `canonical_biotype`, `status`, `source`, `source_id`
 
 `symbol_lookup` columns: `lookup_string`, `lookup_string_upper`, `ensembl_id`, `source_id`, `lookup_type`, `source`
 
@@ -432,7 +440,7 @@ python -m pytest tests/test_pbmc3k.py -v
 python -m pytest tests/ -v
 ```
 
-142 unit tests + 26 integration tests covering: species config (human/mouse/rat/zebrafish/fruit_fly/c_elegans/cynomolgus/rhesus/marmoset/mouse_lemur), feature classification, I/O adapters (h5ad/TSV/CSV/TXT), reference building (HGNC/MGI/RGD/ZFIN/FlyBase/WormBase/Ensembl BioMart), all 5 harmonization tiers (including non-Ensembl FBgn/WBGene IDs), case-insensitive matching, Excel corruption detection, withdrawn gene handling, conservative merge, markdown reporting, empty input handling, and end-to-end integration on the 10x pbmc3k dataset.
+334 unit tests + integration tests covering: species config (human/mouse/rat/zebrafish/fruit_fly/c_elegans/cynomolgus/rhesus/marmoset/mouse_lemur), feature classification, I/O adapters (h5ad/TSV/CSV/TXT), reference building (HGNC/MGI/RGD/ZFIN/FlyBase/WormBase/Ensembl BioMart), all 5 harmonization tiers (including non-Ensembl FBgn/WBGene IDs), case-insensitive matching, Excel corruption detection, withdrawn gene handling, conservative merge, markdown reporting, empty input handling, canonical biotype normalization (all sources + integration across all 10 species), and end-to-end integration on the 10x pbmc3k dataset.
 
 ---
 
@@ -455,6 +463,9 @@ stangene/
 │   ├── harmonize.py             # harmonize(), HarmonizationResult
 │   ├── merge.py                 # merge_features(), MergeResult
 │   ├── report.py                # summary(), conflict_report(), generate_markdown_report(), write_reports()
+│   ├── mito.py                  # mito_mask() — species-aware mitochondrial gene detection
+│   ├── hb.py                    # hb_mask() — species-aware hemoglobin gene detection
+│   ├── biotype.py               # CANONICAL_BIOTYPES, normalize_biotype()
 │   └── _logging.py              # structured logging
 ├── references/                  # built by build_reference(), gitignored
 ├── tests/
@@ -464,6 +475,7 @@ stangene/
 │   ├── test_io.py
 │   ├── test_references.py
 │   ├── test_harmonize.py
+│   ├── test_biotype.py
 │   ├── test_merge.py
 │   ├── test_report.py
 │   ├── test_markdown_report.py
